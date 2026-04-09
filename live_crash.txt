@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "c:\Users\jesus.gonzalez\Desktop\23-03-2026 version 1.2\testing 2\routes\frontend_routes.py", line 204, in index
+    conn_softland = pyodbc.connect(SoftlandConfig.get_connection_string(), timeout=15)
+pyodbc.OperationalError: ('08001', '[08001] [Microsoft][ODBC Driver 17 for SQL Server]SQL Server Network Interfaces: Error Locating Server/Instance Specified [xFFFFFFFF].  (-1) (SQLDriverConnect); [08001] [Microsoft][ODBC Driver 17 for SQL Server]Login timeout expired (0); [08001] [Microsoft][ODBC Driver 17 for SQL Server]A network-related or instance-specific error has occurred while establishing a connection to SQL Server. Server is not found or not accessible. Check if instance name is correct and if SQL Server is configured to allow remote connections. For more information see SQL Server Books Online. (-1)')

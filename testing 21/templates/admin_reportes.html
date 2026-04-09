@@ -1,0 +1,82 @@
+{% extends "admin_layout.html" %}
+{% block title %}Reportes{% endblock %}
+{% block admin_page_heading %}Reportes y métricas{% endblock %}
+{% block admin_page_subtitle %}Resumen de órdenes (último mes en Softland) y rendimiento por usuario en tracking local.{% endblock %}
+
+{% block admin_content %}
+<div class="row g-4 mb-4">
+    {% if stats %}
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100 admin-metric-card">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Total órdenes</div>
+                <div class="display-6 fw-bold" style="color: var(--primary-blue-dark);">{{ stats[0] or 0 }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100 admin-metric-card">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">En bodega</div>
+                <div class="display-6 fw-bold text-primary">{{ stats[1] or 0 }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100 admin-metric-card">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">En ruta</div>
+                <div class="display-6 fw-bold" style="color: #0e7490;">{{ stats[2] or 0 }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100 admin-metric-card">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Entregados</div>
+                <div class="display-6 fw-bold text-success">{{ stats[3] or 0 }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100 admin-metric-card">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Pendientes ERP</div>
+                <div class="display-6 fw-bold text-secondary">{{ stats[4] or 0 }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="table-container admin-table-wrap">
+    <h2 class="h5 premium-page-title mb-3"><i class="bi bi-people me-2"></i>Rendimiento por usuario</h2>
+    <p class="text-muted small mb-3">Basado en <code>DespachosTracking</code> con salida registrada en el último mes.</p>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle dashboard-table">
+            <thead class="bg-light">
+                <tr>
+                    <th>Usuario</th>
+                    <th class="text-end">Órdenes procesadas</th>
+                    <th class="text-end">Entregadas</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rendimiento or [] %}
+                <tr>
+                    <td class="fw-medium">{{ row[0] or 'Sin nombre' }}</td>
+                    <td class="text-end">{{ row[1] or 0 }}</td>
+                    <td class="text-end">{{ row[2] or 0 }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-5">
+                        <i class="bi bi-clipboard-data fs-2 d-block mb-2"></i>No hay movimientos en el período.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,66 @@
+import secrets
+
+from flask import current_app, jsonify, request
+
+
+def _token_from_request():
+    auth = request.headers.get('Authorization') or ''
+    lowered = auth.lower()
+    if lowered.startswith('bearer '):
+        return auth[7:].strip()
+    return (request.headers.get('X-API-Key') or '').strip()
+
+
+def enforce_api_secret_before_request():
+    """
+    Protege /api/softland y /api/tracking.
+
+    - API_SECRET definido: exige Bearer o X-API-Key (compare_digest).
+    - Sin API_SECRET y DEBUG=True: permite (desarrollo Windows / demos locales).
+    - Sin API_SECRET y DEBUG=False: 401 (producción Linux debe definirla).
+    - TESTING sin API_SECRET en config: 500.
+    """
+    expected = (current_app.config.get('API_SECRET') or '').strip()
+    testing = current_app.config.get('TESTING', False)
+    debug = current_app.config.get('DEBUG', False)
+
+    if not expected:
+        if testing:
+            return (
+                jsonify(
+                    {
+                        'status': 'error',
+                        'mensaje': 'API_SECRET no configurado: corrija TestingConfig.',
+                    }
+                ),
+                500,
+            )
+        if debug:
+            return None
+        return (
+            jsonify(
+                {
+                    'status': 'error',
+                    'mensaje': (
+                        'API_SECRET no configurado. Defina la variable en el entorno '
+                        '(Apache SetEnv, systemd Environment=, .env, etc.).'
+                    ),
+                }
+            ),
+            401,
+        )
+
+    got = _token_from_request()
+    if not got or not secrets.compare_digest(got, expected):
+        return (
+            jsonify(
+                {
+                    'status': 'error',
+                    'mensaje': (
+                        'No autorizado: use Authorization: Bearer <token> o cabecera X-API-Key.'
+                    ),
+                }
+            ),
+            401,
+        )
+    return None
