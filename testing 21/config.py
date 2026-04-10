@@ -3,12 +3,32 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def validate_production_secrets(app):
+    """
+    En producción (DEBUG=False y no modo TESTING), exige SECRET_KEY, API_SECRET y DB_PASS
+    definidas en el entorno. Si falta alguna, no arranca.
+    """
+    if app.config.get('DEBUG') or app.config.get('TESTING'):
+        return
+    missing = []
+    for key in ('SECRET_KEY', 'API_SECRET', 'DB_PASS'):
+        if not (os.environ.get(key) or '').strip():
+            missing.append(key)
+    if missing:
+        raise RuntimeError(
+            'Configuración de producción incompleta: defina en el entorno las variables '
+            f"{', '.join(missing)}. Con DEBUG=False la aplicación no arranca sin ellas."
+        )
+
+
 class Config:
     """Configuraciones base compartidas"""
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key-123')
+    # Sin valor por defecto: en producción debe venir del entorno (ver validate_production_secrets).
+    SECRET_KEY = (os.environ.get('SECRET_KEY') or '').strip()
     DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
-    # /api/softland y /api/tracking: Bearer o X-API-Key; en prod definir siempre.
+    # /api/softland y /api/tracking: Bearer o X-API-Key; en prod obligatorio vía entorno.
     API_SECRET = (os.environ.get('API_SECRET') or '').strip()
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))
     EVIDENCE_UPLOAD_DIR = os.environ.get(
@@ -31,14 +51,12 @@ class Config:
 class SoftlandConfig(Config):
     """
     ERP Softland (solo lectura en aplicación).
-    Las variables de entorno tienen prioridad. Los valores por defecto son solo
-    para desarrollo local como el tuyo; en Linux/producción defina todo en .env
-    y rote cualquier clave que haya estado en código compartido.
+    Credenciales solo por entorno; DB_PASS sin default (obligatoria si DEBUG=False al arrancar).
     """
     DB_SERVER = os.environ.get('DB_SERVER', r'RELIX-SQL01\SOFTLAND')
     DB_NAME = os.environ.get('DB_NAME', 'ZDESARROLLO')
     DB_USER = os.environ.get('DB_USER', 'JGonzalez')
-    DB_PASS = os.environ.get('DB_PASS', 'Rex.Dev.852*')
+    DB_PASS = (os.environ.get('DB_PASS') or '').strip()
     DB_DRIVER = os.environ.get('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
 
     @classmethod
