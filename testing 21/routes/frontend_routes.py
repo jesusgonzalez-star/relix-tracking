@@ -47,6 +47,7 @@ _LOCAL_TRACKING_SCHEMA_READY = False
 _SOFTLAND_DASHBOARD_CACHE = {}
 _SOFTLAND_CACHE_TTL_SECONDS = 120
 _DASHBOARD_PAGE_SIZE = 30
+
 _STORAGE_STATE_MAP = {
     'INGRESADO': 'INGRESADO',
     'EN BODEGA': 'EN_BODEGA',
@@ -75,17 +76,97 @@ def _get_csrf_token():
     return token
 
 
+def _faena_softland_req_labels_map(cursor_sf, num_inter_values):
+    """
+    Mapa NumInterOC -> texto de requisición (mismo enfoque por lotes que el dashboard bodega).
+    Evita subconsultas correlacionadas que suelen fallar o agotar tiempo en SQL Server.
+    """
+    nums = []
+    seen = set()
+    for v in num_inter_values:
+        if v is None:
+            continue
+        try:
+            i = int(v)
+        except (TypeError, ValueError):
+            continue
+        if i not in seen:
+            seen.add(i)
+            nums.append(i)
+    if not nums:
+        return {}
+    placeholders = ",".join(["?"] * len(nums))
+    cursor_sf.execute(
+        f"""
+        SELECT
+            Q.NumInterOC,
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(CAST(MAX(R.NumReq) AS NVARCHAR(80)))), ''),
+                MAX(NULLIF(LTRIM(RTRIM(R.Solicita)), '')),
+                MAX(NULLIF(LTRIM(RTRIM(S.DesSolic)), ''))
+            ) AS ReqLabel
+        FROM softland.owreqoc Q WITH (NOLOCK)
+        LEFT JOIN softland.owrequisicion R WITH (NOLOCK) ON Q.NumReq = R.NumReq
+        LEFT JOIN softland.owsolicitanterq S WITH (NOLOCK) ON R.CodSolicita = S.CodSolic
+        WHERE Q.NumInterOC IN ({placeholders})
+        GROUP BY Q.NumInterOC """,
+        tuple(nums),
+    )
+    out = {}
+    for row in cursor_sf.fetchall():
+        key = row[0]
+        try:
+            key = int(key)
+        except (TypeError, ValueError):
+            continue
+        lab = (row[1] or "").strip() if row[1] is not None else ""
+        out[key] = lab if lab else "Sin requisición"
+    return out
+
+
 @bp.app_context_processor
 def _inject_csrf_token():
     return {'csrf_token': _get_csrf_token}
 
 def _to_date(value):
-    """Normaliza datetime/date para comparaciones seguras en dashboard."""
+    """Normaliza datetime/date/str/obj con ymd (pyodbc/SQL) a date para dashboard y badges."""
+    if value is None:
+        return None
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
+    if isinstance(value, str):
+        raw = (value or '').strip()
+        if not raw:
+            return None
+        s = raw.split()[0][:10]
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y'):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        return None
+    if hasattr(value, 'year') and hasattr(value, 'month') and hasattr(value, 'day'):
+        try:
+            return date(int(value.year), int(value.month), int(value.day))
+        except (TypeError, ValueError):
+            return None
     return None
+
+
+@bp.app_template_filter('dash_date')
+def _filter_dash_date(value):
+    """Formato dd-mm-YYYY para celdas del dashboard (evita fallos si el tipo varía)."""
+    d = _to_date(value)
+    return d.strftime('%d-%m-%Y') if d else 'N/A'
+
+
+@bp.app_template_filter('dash_date_key')
+def _filter_dash_date_key(value):
+    """Clave YYYY-MM-DD para comparar en plantilla (entrega vs ETA)."""
+    d = _to_date(value)
+    return d.strftime('%Y-%m-%d') if d else ''
 
 def _build_eta_badge(fecha_eta, estado_tracking, fecha_entrega=None):
     """
@@ -2234,6 +2315,32 @@ def _matches_bodega_tracking_filter(status_label, tracking_filter):
         return True
     return (status_label or '').strip() == expected_label
 
+
+def _faena_matches_tracking_estado(orden, tracking_filter):
+    """Filtro de dashboard FAENA alineado con las mismas claves que bodega (vista operativa en faena)."""
+    tf = (tracking_filter or '').strip().lower()
+    if not tf:
+        return True
+    if len(orden) < 19:
+        return True
+    est = (orden[7] or '').strip()
+    bodega_state = (orden[18] or '').strip()
+    recep = (orden[15] or '').strip() if len(orden) > 15 else ''
+    partial = bool(orden[14]) if len(orden) > 14 else False
+    if tf == 'en_ruta':
+        return est == 'En Ruta'
+    if tf == 'entregado':
+        return est == 'Entregado'
+    if tf == 'no_entregado':
+        return bodega_state == 'No entregado'
+    if tf == 'recepcion_parcial':
+        return bodega_state == 'Recepción parcial'
+    if tf == 'entrega_total':
+        return bodega_state == 'Entrega total'
+    if tf == 'entrega_parcial_faena':
+        return partial and recep != 'Recepcionado completo'
+    return True
+
 @bp.route('/evidencias/<path:filename>')
 @login_required()
 def get_evidencia(filename):
@@ -2590,22 +2697,52 @@ def index():
 
             faena_mode = has_any_role(user_role, ['FAENA']) and not has_any_role(user_role, ['SUPERADMIN'])
             if faena_mode:
-                faena_tracking_filter = tracking_estado_raw if tracking_estado_raw in ('', 'en_ruta', 'entregado') else ''
+                faena_sql_estado_filter = tracking_estado_raw if tracking_estado_raw in ('en_ruta', 'entregado') else ''
                 faena_where_extra = ""
                 faena_params_extra = []
-                if filtro_desde_date:
-                    faena_where_extra += " AND CAST(COALESCE(FechaHoraEntrega, FechaHoraSalida) AS date) >= ?"
-                    faena_params_extra.append(filtro_desde_raw)
-                if filtro_hasta_date:
-                    faena_where_extra += " AND CAST(COALESCE(FechaHoraEntrega, FechaHoraSalida) AS date) <= ?"
-                    faena_params_extra.append(filtro_hasta_raw)
-                faena_folios_by_cc = set()
+                if fecha_tipo_raw == 'entrega_faena':
+                    if filtro_desde_date:
+                        faena_where_extra += (
+                            " AND D.FechaHoraEntrega IS NOT NULL"
+                            " AND CAST(D.FechaHoraEntrega AS date) >= ?"
+                        )
+                        faena_params_extra.append(filtro_desde_raw)
+                    if filtro_hasta_date:
+                        faena_where_extra += (
+                            " AND D.FechaHoraEntrega IS NOT NULL"
+                            " AND CAST(D.FechaHoraEntrega AS date) <= ?"
+                        )
+                        faena_params_extra.append(filtro_hasta_raw)
+                else:
+                    if filtro_desde_date:
+                        faena_where_extra += (
+                            " AND CAST(COALESCE(D.FechaHoraEntrega, D.FechaHoraSalida) AS date) >= ?"
+                        )
+                        faena_params_extra.append(filtro_desde_raw)
+                    if filtro_hasta_date:
+                        faena_where_extra += (
+                            " AND CAST(COALESCE(D.FechaHoraEntrega, D.FechaHoraSalida) AS date) <= ?"
+                        )
+                        faena_params_extra.append(filtro_hasta_raw)
+                faena_oc_filter_sql = ""
+                faena_oc_filter_params = []
+                if num_oc_filtro_raw.isdigit():
+                    faena_oc_filter_sql = " AND D.NumOc = ?"
+                    faena_oc_filter_params.append(int(num_oc_filtro_raw))
+                effective_cc_tokens = []
                 if cc_filter_token and cc_filter_token in set(faena_cc_asignados):
-                    faena_folios_by_cc = _get_folios_by_centros_costo([cc_filter_token])
+                    effective_cc_tokens = [cc_filter_token]
+                elif faena_cc_asignados:
+                    effective_cc_tokens = list(dict.fromkeys(faena_cc_asignados))
+
+                faena_folios_for_visibility = set()
+                if effective_cc_tokens:
+                    faena_folios_for_visibility = _get_folios_by_centros_costo(effective_cc_tokens)
+
                 faena_visibility_clause = "D.transportista_asignado_id = ?"
                 faena_visibility_params = [user_id]
-                if faena_folios_by_cc:
-                    folios_csv = ",".join(str(int(x)) for x in sorted(faena_folios_by_cc))
+                if faena_folios_for_visibility:
+                    folios_csv = ",".join(str(int(x)) for x in sorted(faena_folios_for_visibility))
                     faena_visibility_clause = """
                         (
                             D.transportista_asignado_id = ?
@@ -2623,17 +2760,23 @@ def index():
                     SELECT NumOc, Estado, FechaHoraSalida, FechaHoraEntrega, transportista_asignado_id
                     FROM DespachosTracking D
                     WHERE {faena_visibility_clause}
-                      AND UPPER(LTRIM(RTRIM(REPLACE(Estado, '_', ' ')))) IN ('EN RUTA', 'ENTREGADO')
-                      {"AND UPPER(LTRIM(RTRIM(REPLACE(Estado, '_', ' ')))) = 'EN RUTA'" if faena_tracking_filter == 'en_ruta' else ""}
-                      {"AND UPPER(LTRIM(RTRIM(REPLACE(Estado, '_', ' ')))) = 'ENTREGADO'" if faena_tracking_filter == 'entregado' else ""}
+                      AND UPPER(LTRIM(RTRIM(REPLACE(D.Estado, '_', ' ')))) IN ('EN RUTA', 'ENTREGADO')
+                      {faena_oc_filter_sql}
+                      {"AND UPPER(LTRIM(RTRIM(REPLACE(D.Estado, '_', ' ')))) = 'EN RUTA'" if faena_sql_estado_filter == 'en_ruta' else ""}
+                      {"AND UPPER(LTRIM(RTRIM(REPLACE(D.Estado, '_', ' ')))) = 'ENTREGADO'" if faena_sql_estado_filter == 'entregado' else ""}
                       {faena_where_extra}
                     ORDER BY
                         CASE WHEN D.transportista_asignado_id = ? THEN 0 ELSE 1 END,
-                        COALESCE(FechaHoraEntrega, FechaHoraSalida) DESC,
-                        NumOc DESC
+                        COALESCE(D.FechaHoraEntrega, D.FechaHoraSalida) DESC,
+                        D.NumOc DESC
                     OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
                     """,
-                    tuple(faena_visibility_params + faena_params_extra + [user_id, row_offset, page_size + 1]),
+                    tuple(
+                        faena_visibility_params
+                        + faena_oc_filter_params
+                        + faena_params_extra
+                        + [user_id, row_offset, page_size + 1]
+                    ),
                 )
                 local_rows = cursor.fetchall()
                 has_more = len(local_rows) > page_size
@@ -2643,52 +2786,66 @@ def index():
                 active_envio_map_faena = _load_active_envio_id_by_folio(cursor, [row[0] for row in local_rows])
 
                 softland_map = {}
-                has_more_cc_softland = False
                 folios_local = [int(row[0]) for row in local_rows if row and row[0] is not None]
                 folios_scope = set(folios_local)
-                if cc_filter_token and cc_filter_token in set(faena_cc_asignados):
-                    try:
-                        from config import SoftlandConfig
-                        import pyodbc
-                        conn_softland_faena = pyodbc.connect(SoftlandConfig.get_connection_string(), timeout=10)
-                        cursor_sf = conn_softland_faena.cursor()
-                        cc_desc_col = _resolve_softland_column(
-                            cursor_sf,
-                            'OW_vsnpTraeEncabezadoOCompra',
-                            ('DescCC', 'DesCC', 'CentroCosto', 'NomCC')
-                        )
-                        cc_code_col = _resolve_softland_column(
-                            cursor_sf,
-                            'OW_vsnpTraeEncabezadoOCompra',
-                            ('CodiCC', 'CodCC', 'CentroCosto', 'CCosto')
-                        )
-                        cc_select_expr = "'Sin CC' AS CentroCosto"
-                        if cc_desc_col and cc_code_col:
-                            cc_select_expr = (
-                                f"COALESCE(NULLIF(LTRIM(RTRIM(OC.{cc_desc_col})), ''), "
-                                f"NULLIF(LTRIM(RTRIM(OC.{cc_code_col})), ''), 'Sin CC') AS CentroCosto"
-                            )
-                        elif cc_desc_col:
-                            cc_select_expr = f"COALESCE(NULLIF(LTRIM(RTRIM(OC.{cc_desc_col})), ''), 'Sin CC') AS CentroCosto"
-                        elif cc_code_col:
-                            cc_select_expr = f"COALESCE(NULLIF(LTRIM(RTRIM(OC.{cc_code_col})), ''), 'Sin CC') AS CentroCosto"
-                        cc_where_expr = "UPPER(LTRIM(RTRIM('SIN CC')))"
-                        if cc_desc_col and cc_code_col:
-                            cc_where_expr = (
-                                f"UPPER(LTRIM(RTRIM(COALESCE(NULLIF(OC.{cc_desc_col}, ''), NULLIF(OC.{cc_code_col}, ''), 'SIN CC'))))"
-                            )
-                        elif cc_desc_col:
-                            cc_where_expr = f"UPPER(LTRIM(RTRIM(COALESCE(NULLIF(OC.{cc_desc_col}, ''), 'SIN CC'))))"
-                        elif cc_code_col:
-                            cc_where_expr = f"UPPER(LTRIM(RTRIM(COALESCE(NULLIF(OC.{cc_code_col}, ''), 'SIN CC'))))"
 
-                        softland_cc_where_extra = ""
-                        softland_cc_params = [cc_filter_token]
-                        if num_oc_filtro_raw.isdigit():
-                            softland_cc_where_extra += " AND OC.NumOc = ?"
-                            softland_cc_params.append(int(num_oc_filtro_raw))
+                def _faena_resolve_cc_exprs(cursor_sf_inner):
+                    cc_desc_col = _resolve_softland_column(
+                        cursor_sf_inner,
+                        'OW_vsnpTraeEncabezadoOCompra',
+                        ('DescCC', 'DesCC', 'CentroCosto', 'NomCC'),
+                    )
+                    cc_code_col = _resolve_softland_column(
+                        cursor_sf_inner,
+                        'OW_vsnpTraeEncabezadoOCompra',
+                        ('CodiCC', 'CodCC', 'CentroCosto', 'CCosto'),
+                    )
+                    cc_select_expr = "'Sin CC' AS CentroCosto"
+                    if cc_desc_col and cc_code_col:
+                        cc_select_expr = (
+                            f"COALESCE(NULLIF(LTRIM(RTRIM(OC.{cc_desc_col})), ''), "
+                            f"NULLIF(LTRIM(RTRIM(OC.{cc_code_col})), ''), 'Sin CC') AS CentroCosto"
+                        )
+                    elif cc_desc_col:
+                        cc_select_expr = (
+                            f"COALESCE(NULLIF(LTRIM(RTRIM(OC.{cc_desc_col})), ''), 'Sin CC') AS CentroCosto"
+                        )
+                    elif cc_code_col:
+                        cc_select_expr = (
+                            f"COALESCE(NULLIF(LTRIM(RTRIM(OC.{cc_code_col})), ''), 'Sin CC') AS CentroCosto"
+                        )
+                    cc_where_expr = "UPPER(LTRIM(RTRIM('SIN CC')))"
+                    if cc_desc_col and cc_code_col:
+                        cc_where_expr = (
+                            f"UPPER(LTRIM(RTRIM(COALESCE(NULLIF(OC.{cc_desc_col}, ''), "
+                            f"NULLIF(OC.{cc_code_col}, ''), 'SIN CC'))))"
+                        )
+                    elif cc_desc_col:
+                        cc_where_expr = (
+                            f"UPPER(LTRIM(RTRIM(COALESCE(NULLIF(OC.{cc_desc_col}, ''), 'SIN CC'))))"
+                        )
+                    elif cc_code_col:
+                        cc_where_expr = (
+                            f"UPPER(LTRIM(RTRIM(COALESCE(NULLIF(OC.{cc_code_col}, ''), 'SIN CC'))))"
+                        )
+                    return cc_select_expr, cc_where_expr
 
-                        cursor_sf.execute(f"""
+                conn_softland_faena = None
+                try:
+                    from config import SoftlandConfig
+                    import pyodbc
+
+                    conn_softland_faena = pyodbc.connect(
+                        SoftlandConfig.get_connection_string(), timeout=20
+                    )
+                    cursor_sf = conn_softland_faena.cursor()
+                    cc_select_expr, _ = _faena_resolve_cc_exprs(cursor_sf)
+
+                    if folios_scope:
+                        folio_list = sorted(int(f) for f in folios_scope)
+                        placeholders = ",".join(["?"] * len(folio_list))
+                        cursor_sf.execute(
+                            f"""
                             SELECT
                                 OC.NumOc,
                                 COALESCE(TRY_CONVERT(date, OC.FechaOC, 103), TRY_CONVERT(date, OC.FechaOC)) AS FechaEmision,
@@ -2698,91 +2855,82 @@ def index():
                                 ISNULL(OC.ValorTotMB, 0) AS MontoTotal,
                                 OC.NumInterOc AS NumInterOC
                             FROM softland.OW_vsnpTraeEncabezadoOCompra OC WITH (NOLOCK)
-                            WHERE {cc_where_expr} = ?
-                              {softland_cc_where_extra}
-                            ORDER BY OC.NumOc DESC
-                            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-                        """, tuple(softland_cc_params + [row_offset, page_size + 1]))
-                        oc_rows = cursor_sf.fetchall()
-                        has_more_cc_softland = len(oc_rows) > page_size
-                        oc_rows = oc_rows[:page_size]
+                            WHERE OC.NumOc IN ({placeholders})
+                            """,
+                            tuple(folio_list),
+                        )
+                        oc_rows_loc = cursor_sf.fetchall()
+                        num_inters = []
+                        folios_sin_numinter = []
+                        for r in oc_rows_loc:
+                            if len(r) <= 6 or r[6] is None:
+                                folios_sin_numinter.append(int(r[0]))
+                                continue
+                            try:
+                                num_inters.append(int(r[6]))
+                            except (TypeError, ValueError):
+                                folios_sin_numinter.append(int(r[0]))
+                        folio_a_numinter = {}
+                        if folios_sin_numinter:
+                            ph_orden = ",".join(["?"] * len(folios_sin_numinter))
+                            cursor_sf.execute(
+                                f"""
+                                SELECT O.NumOC, O.NumInterOC
+                                FROM softland.owordencom O WITH (NOLOCK)
+                                WHERE O.NumOC IN ({ph_orden})
+                                  AND O.NumInterOC IS NOT NULL """,
+                                tuple(folios_sin_numinter),
+                            )
+                            for ord_row in cursor_sf.fetchall():
+                                try:
+                                    fo = int(ord_row[0])
+                                    ni = int(ord_row[1])
+                                    folio_a_numinter[fo] = ni
+                                    num_inters.append(ni)
+                                except (TypeError, ValueError):
+                                    pass
                         req_map = {}
                         try:
-                            num_inter_values = [row[6] for row in oc_rows if len(row) > 6 and row[6] is not None]
-                            if num_inter_values:
-                                req_placeholders = ",".join(["?"] * len(num_inter_values))
-                                cursor_sf.execute(f"""
-                                    SELECT
-                                        Q.NumInterOC,
-                                        COALESCE(
-                                            MAX(NULLIF(LTRIM(RTRIM(R.Solicita)), '')),
-                                            MAX(NULLIF(LTRIM(RTRIM(S.DesSolic)), ''))
-                                        ) AS Solicitante
-                                    FROM softland.owreqoc Q WITH (NOLOCK)
-                                    LEFT JOIN softland.owrequisicion R WITH (NOLOCK) ON Q.NumReq = R.NumReq
-                                    LEFT JOIN softland.owsolicitanterq S WITH (NOLOCK) ON R.CodSolicita = S.CodSolic
-                                    WHERE Q.NumInterOC IN ({req_placeholders})
-                                    GROUP BY Q.NumInterOC
-                                """, tuple(num_inter_values))
-                                req_map = {r[0]: (r[1] or 'Sin requisición') for r in cursor_sf.fetchall()}
+                            req_map = _faena_softland_req_labels_map(cursor_sf, num_inters)
                         except Exception as req_exc:
-                            logger.warning("FAENA: no se pudo resolver requisición Softland: %s", req_exc)
-
-                        for row_sf in oc_rows:
-                            folio_sf = int(row_sf[0])
-                            softland_map[folio_sf] = {
-                                'fecha_emision': _to_date(row_sf[1]),
-                                'fecha_eta': _to_date(row_sf[2]),
-                                'proveedor': row_sf[3] or 'Sin Proveedor',
-                                'cc': row_sf[4] or 'Sin CC',
-                                'monto': float(row_sf[5] or 0),
-                                'requisicion': req_map.get(row_sf[6], 'Sin requisición'),
-                            }
-                        conn_softland_faena.close()
-                    except Exception as exc:
-                        logger.warning(f"No fue posible enriquecer vista faena con Softland en tiempo real: {exc}")
-                elif folios_scope:
-                    try:
-                        from config import SoftlandConfig
-                        import pyodbc
-                        conn_softland_faena = pyodbc.connect(SoftlandConfig.get_connection_string(), timeout=10)
-                        cursor_sf = conn_softland_faena.cursor()
-                        folios_csv = ",".join(str(int(f)) for f in sorted(folios_scope))
-                        cursor_sf.execute("""
-                            SELECT
-                                OC.NumOc,
-                                COALESCE(TRY_CONVERT(date, OC.FechaOC, 103), TRY_CONVERT(date, OC.FechaOC)) AS FechaEmision,
-                                COALESCE(TRY_CONVERT(date, OC.FecFinalOC, 103), TRY_CONVERT(date, OC.FecFinalOC)) AS FechaLlegadaEstimada,
-                                COALESCE(OC.NomAux, 'Sin Proveedor') AS Proveedor,
-                                'Sin CC' AS CentroCosto,
-                                ISNULL(OC.ValorTotMB, 0) AS MontoTotal,
-                                OC.NumInterOc AS NumInterOC
-                            FROM softland.OW_vsnpTraeEncabezadoOCompra OC WITH (NOLOCK)
-                            WHERE OC.NumOc IN (
-                                SELECT TRY_CONVERT(INT, value)
-                                FROM STRING_SPLIT(CAST(? AS NVARCHAR(MAX)), ',')
-                                WHERE TRY_CONVERT(INT, value) IS NOT NULL
+                            logger.warning(
+                                "Faena: no se pudo cargar requisiciones por NumInterOC: %s",
+                                req_exc,
+                                exc_info=True,
                             )
-                        """, (folios_csv,))
-                        for row_sf in cursor_sf.fetchall():
+                        for row_sf in oc_rows_loc:
                             folio_sf = int(row_sf[0])
+                            num_inter_raw = row_sf[6] if len(row_sf) > 6 else None
+                            try:
+                                num_inter_key = int(num_inter_raw) if num_inter_raw is not None else None
+                            except (TypeError, ValueError):
+                                num_inter_key = None
+                            if num_inter_key is None:
+                                num_inter_key = folio_a_numinter.get(folio_sf)
                             softland_map[folio_sf] = {
                                 'fecha_emision': _to_date(row_sf[1]),
                                 'fecha_eta': _to_date(row_sf[2]),
                                 'proveedor': row_sf[3] or 'Sin Proveedor',
                                 'cc': row_sf[4] or 'Sin CC',
                                 'monto': float(row_sf[5] or 0),
-                                'requisicion': 'Sin requisición',
+                                'requisicion': req_map.get(num_inter_key, 'Sin requisición'),
                             }
-                        conn_softland_faena.close()
-                    except Exception as exc:
-                        logger.warning(f"No fue posible enriquecer vista faena con Softland en tiempo real: {exc}")
+                except Exception as exc:
+                    logger.warning(
+                        "No fue posible enriquecer vista faena con Softland en tiempo real: %s",
+                        exc,
+                        exc_info=True,
+                    )
+                finally:
+                    if conn_softland_faena:
+                        try:
+                            conn_softland_faena.close()
+                        except Exception:
+                            pass
 
                 ordenes = []
-                tracked_folios = set()
                 for trk in local_rows:
                     folio = int(trk[0])
-                    tracked_folios.add(folio)
                     softland_row = softland_map.get(folio, {})
                     estado_tracking = _canonical_tracking_state(trk[1] or 'INGRESADO')
                     is_dispatched_to_me = (trk[4] == user_id)
@@ -2817,48 +2965,23 @@ def index():
                         bool(has_any_arrival),
                         bool(is_dispatched_to_me),
                         active_envio_map_faena.get(folio),
+                        False,
                     ))
-                for folio, softland_row in softland_map.items():
-                    if folio in tracked_folios:
-                        continue
-                    estado_tracking = 'En Bodega'
-                    eta_label, eta_class = _build_eta_badge(softland_row.get('fecha_eta'), estado_tracking, None)
-                    ordenes.append((
-                        folio,
-                        softland_row.get('fecha_emision'),
-                        softland_row.get('fecha_eta'),
-                        softland_row.get('proveedor', 'Sin Proveedor'),
-                        softland_row.get('requisicion', 'Sin requisición'),
-                        softland_row.get('monto', 0),
-                        'A',
-                        estado_tracking,
-                        None,
-                        None,
-                        None,
-                        0,
-                        0,
-                        softland_row.get('cc', 'Sin CC'),
-                        False,
-                        'No recepcionado',
-                        eta_label,
-                        eta_class,
-                        'No entregado',
-                        False,
-                        False,
-                        None,
-                    ))
-                has_more = has_more or has_more_cc_softland
+                ordenes = [
+                    o for o in ordenes if _faena_matches_tracking_estado(o, tracking_estado_raw)
+                ]
 
                 cursor.execute(f"""
                     SELECT
                         COUNT(1) AS TotalOC,
-                        SUM(CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(Estado, '_', ' ')))) IN ('EN BODEGA', 'INGRESADO', 'DISPONIBLE EN BODEGA') THEN 1 ELSE 0 END) AS EnBodega,
-                        SUM(CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(Estado, '_', ' ')))) = 'EN RUTA' THEN 1 ELSE 0 END) AS Despachados,
-                        SUM(CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(Estado, '_', ' ')))) = 'ENTREGADO' THEN 1 ELSE 0 END) AS Entregados
+                        SUM(CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(D.Estado, '_', ' ')))) IN ('EN BODEGA', 'INGRESADO', 'DISPONIBLE EN BODEGA') THEN 1 ELSE 0 END) AS EnBodega,
+                        SUM(CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(D.Estado, '_', ' ')))) = 'EN RUTA' THEN 1 ELSE 0 END) AS Despachados,
+                        SUM(CASE WHEN UPPER(LTRIM(RTRIM(REPLACE(D.Estado, '_', ' ')))) = 'ENTREGADO' THEN 1 ELSE 0 END) AS Entregados
                     FROM DespachosTracking D
                     WHERE {faena_visibility_clause}
+                      {faena_oc_filter_sql}
                       {faena_where_extra}
-                """, tuple(faena_visibility_params + faena_params_extra))
+                """, tuple(faena_visibility_params + faena_oc_filter_params + faena_params_extra))
                 stats_row = cursor.fetchone()
                 estadisticas = (
                     int(stats_row[0] or 0),
@@ -2888,9 +3011,9 @@ def index():
                     has_previous=(page > 1),
                     filtro_desde=filtro_desde_raw,
                     filtro_hasta=filtro_hasta_raw,
-                    tracking_estado_selected=faena_tracking_filter,
-                    fecha_tipo_selected='emision',
-                    fecha_tipo_label=_label_fecha_tipo_bodega('emision'),
+                    tracking_estado_selected=tracking_estado_raw,
+                    fecha_tipo_selected=fecha_tipo_raw,
+                    fecha_tipo_label=_label_fecha_tipo_bodega(fecha_tipo_raw),
                     dashboard_today=date.today(),
                     centros_costo_opciones=centros_costo_opciones,
                     num_req_filtro=num_req_filtro_raw,
@@ -3362,6 +3485,9 @@ def index():
                         continue
                 elif tracking_estado_raw == 'en_ruta':
                     pass
+                elif tracking_estado_raw == 'entregado':
+                    if not _state_in(estado_tracking, ('Entregado',)):
+                        continue
                 elif not _matches_bodega_tracking_filter(bodega_tracking_status, tracking_estado_raw):
                     continue
                     
@@ -3493,6 +3619,9 @@ def index():
                             continue
                     elif tracking_estado_raw == 'en_ruta':
                         if not _state_in(estado_tracking, ('En Ruta',)):
+                            continue
+                    elif tracking_estado_raw == 'entregado':
+                        if not _state_in(estado_tracking, ('Entregado',)):
                             continue
                     elif not _matches_bodega_tracking_filter(bodega_tracking_status, tracking_estado_raw):
                         continue

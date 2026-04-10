@@ -142,7 +142,7 @@
                 </div>
                 <div class="actions-toolbar d-flex gap-2 align-items-center flex-wrap">
                     <form action="{{ url_for('frontend.index') }}" method="GET" class="d-flex align-items-end gap-2 flex-wrap">
-                        {% if can_dispatch or can_view_global %}
+                        {% if can_dispatch or can_view_global or can_receive %}
                         <div class="cc-filter-container" style="min-width: 14rem;">
                             <label for="fechaTipoFiltro" class="form-label mb-1 small text-muted">Fechas según</label>
                             <select id="fechaTipoFiltro" name="fecha_tipo" class="form-select form-select-sm" aria-label="Tipo de fecha para el rango">
@@ -187,7 +187,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    {% if can_dispatch %}
+                    {% if can_dispatch or can_receive %}
                     <div class="cc-filter-container">
                         <label for="trackingStateFilter" class="visually-hidden">Filtrar por estado tracking</label>
                         <select id="trackingStateFilter" class="form-select form-select-sm" aria-label="Filtrar por estado tracking">
@@ -197,15 +197,7 @@
                             <option value="entrega_total" {% if tracking_estado_selected == 'entrega_total' %}selected{% endif %}>Entrega total</option>
                             <option value="entrega_parcial_faena" {% if tracking_estado_selected == 'entrega_parcial_faena' %}selected{% endif %}>Entrega parcial (bodega → faena)</option>
                             <option value="en_ruta" {% if tracking_estado_selected == 'en_ruta' %}selected{% endif %}>En ruta (pendiente en faena)</option>
-                        </select>
-                    </div>
-                    {% elif can_receive %}
-                    <div class="cc-filter-container">
-                        <label for="trackingStateFilter" class="visually-hidden">Filtrar por estado</label>
-                        <select id="trackingStateFilter" class="form-select form-select-sm" aria-label="Filtrar por estado">
-                            <option value="" {% if not tracking_estado_selected %}selected{% endif %}>Todos</option>
-                            <option value="en_ruta" {% if tracking_estado_selected == 'en_ruta' %}selected{% endif %}>Pendientes (En Ruta)</option>
-                            <option value="entregado" {% if tracking_estado_selected == 'entregado' %}selected{% endif %}>Cerradas (Entregado)</option>
+                            <option value="entregado" {% if tracking_estado_selected == 'entregado' %}selected{% endif %}>Entregado</option>
                         </select>
                     </div>
                     {% endif %}
@@ -228,7 +220,7 @@
                         {% if num_req_filtro %}<span class="d-block mt-1"><i class="bi bi-funnel me-1"></i>Requisición: <strong>{{ num_req_filtro }}</strong></span>{% endif %}
                         {% if num_oc_filtro %}<span class="d-block mt-1"><i class="bi bi-hash me-1"></i>OC: <strong>{{ num_oc_filtro }}</strong></span>{% endif %}
                     </div>
-                    {% elif (can_dispatch or can_view_global) and fecha_tipo_label %}
+                    {% elif (can_dispatch or can_view_global or can_receive) and fecha_tipo_label %}
                     <div class="w-100 small text-muted mb-0 mt-1">
                         <i class="bi bi-calendar-range me-1"></i>Rango aplicado a: <strong>{{ fecha_tipo_label }}</strong>
                         {% if num_req_filtro %}<span class="ms-2"><i class="bi bi-funnel me-1"></i>Requisición: <strong>{{ num_req_filtro }}</strong></span>{% endif %}
@@ -250,7 +242,9 @@
                             <th>Fechas</th>
                             <th>Proveedor / Requisición</th>
                             <th>Centro de Costo</th>
+                            {% if not can_receive %}
                             <th class="text-end">Monto</th>
+                            {% endif %}
                             <th>Estado Tracking</th>
                             <th class="text-center">Acciones</th>
                         </tr>
@@ -278,11 +272,11 @@
                                 </div>
                             </td>
                             <td>
-                                <div><i class="bi bi-calendar3 text-muted me-1"></i>{{ orden[1].strftime('%d-%m-%Y') if orden[1] else 'N/A' }}</div>
+                                <div><i class="bi bi-calendar3 text-muted me-1"></i>{{ orden[1]|dash_date }}</div>
                                 <div class="text-muted small">
-                                    <i class="bi bi-calendar-check me-1"></i>ETA: {{ orden[2].strftime('%d-%m-%Y') if orden[2] else 'N/A' }}
+                                    <i class="bi bi-calendar-check me-1"></i>ETA: {{ orden[2]|dash_date }}
                                     {% if orden[7] == 'Entregado' %}
-                                        {% if orden[2] and orden[10] and orden[10].strftime('%Y-%m-%d') > orden[2].strftime('%Y-%m-%d') %}
+                                        {% if orden[2] and orden[10] and (orden[10]|dash_date_key) > (orden[2]|dash_date_key) %}
                                             <span class="badge bg-danger ms-1">Entregado con atraso</span>
                                         {% else %}
                                             <span class="badge bg-success ms-1">Entregado a tiempo</span>
@@ -296,17 +290,21 @@
                             </td>
                             <td>
                                 <div class="fw-medium text-dark">{{ orden[3] }}</div>
-                                <span class="text-muted small">Compra asociada a OC</span>
-                            </td>
-                            <td><span class="fw-medium text-dark cc-cell">{{ orden[13] }}</span></td>
-                            <td class="text-end fw-semibold">
-                                {% if can_receive %}
-                                    <span class="text-muted">-</span>
+                                {% if orden[4] and orden[4] != 'Sin requisición' %}
+                                <a href="{{ url_for('frontend.detalle_requisicion', folio=orden[0]) }}" class="text-muted small d-inline-block mt-1">
+                                    <i class="bi bi-file-earmark-text me-1"></i>Requisición: {{ orden[4] }}
+                                </a>
                                 {% else %}
-                                    ${{ "{:,.0f}".format(orden[5]) }}
+                                <span class="text-muted small d-inline-block mt-1">Sin requisición asociada</span>
                                 {% endif %}
                             </td>
-                            <td class="tracking-state-cell" data-tracking-state="{{ bodega_state if can_dispatch else '' }}">
+                            <td><span class="fw-medium text-dark cc-cell">{{ orden[13] }}</span></td>
+                            {% if not can_receive %}
+                            <td class="text-end fw-semibold">
+                                ${{ "{:,.0f}".format(orden[5]) }}
+                            </td>
+                            {% endif %}
+                            <td class="tracking-state-cell" data-tracking-state="{{ bodega_state if (can_dispatch or can_receive) else '' }}">
                                 <div class="d-flex flex-column align-items-start gap-1">
                                     {% set bodega_bg = 'success' if bodega_state == 'Entrega total' else 'warning text-dark' if bodega_state == 'Recepción parcial' else 'secondary' %}
                                     <span class="badge bg-{{ bodega_bg }} px-3 py-2 shadow-sm rounded-pill">
@@ -380,7 +378,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center py-5 text-muted">
+                            <td colspan="{{ 6 if can_receive else 7 }}" class="text-center py-5 text-muted">
                                 <i class="bi bi-inbox fs-2 d-block mb-3 text-secondary"></i> 
                                 <span class="fs-5">No hay órdenes registradas para mostrar</span>
                                 {% if num_req_filtro or num_oc_filtro or filtro_desde or filtro_hasta or (fecha_tipo_selected == 'entrega_faena') %}

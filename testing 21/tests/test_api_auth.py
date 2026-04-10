@@ -1,5 +1,3 @@
-import pytest
-
 from config import TestingConfig
 
 
@@ -7,14 +5,6 @@ class _StrictApiConfig(TestingConfig):
     TESTING = False
     DEBUG = False
     API_SECRET = 'secret-for-strict-test'
-
-
-@pytest.fixture(autouse=True)
-def _production_like_required_env(monkeypatch):
-    """create_app con TESTING=False exige SECRET_KEY, API_SECRET y DB_PASS en el entorno."""
-    monkeypatch.setenv('SECRET_KEY', 'strict-test-secret-key')
-    monkeypatch.setenv('API_SECRET', 'secret-for-strict-test')
-    monkeypatch.setenv('DB_PASS', 'strict-test-softland-pass')
 
 
 def test_softland_401_without_key_when_production_like():

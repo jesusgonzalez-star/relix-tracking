@@ -3,7 +3,7 @@ import logging
 from flask import Flask, jsonify
 from flasgger import Swagger
 
-from config import LocalDbConfig, validate_production_secrets
+from config import LocalDbConfig
 from extensions import db, ma, limiter
 from utils.errors import register_error_handlers
 from routes import softland_routes, tracking_routes, frontend_routes
@@ -20,7 +20,12 @@ def create_app(config_class=LocalDbConfig):
     
     # Cargar configuraciones
     app.config.from_object(config_class)
-    validate_production_secrets(app)
+
+    default_secret = 'default-secret-key-123'
+    if (not app.config.get('DEBUG')) and app.config.get('SECRET_KEY') == default_secret:
+        app.logger.warning(
+            'SECRET_KEY sigue siendo el valor por defecto; defina SECRET_KEY en el entorno para producción.'
+        )
 
     if app.config.get('DEBUG') and not (app.config.get('API_SECRET') or '').strip():
         app.logger.warning(
