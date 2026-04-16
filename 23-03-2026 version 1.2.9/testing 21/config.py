@@ -71,6 +71,7 @@ class SoftlandConfig(Config):
     """
     ERP Softland (solo lectura en aplicación).
     Credenciales solo por entorno; DB_PASS sin default (obligatoria si DEBUG=False al arrancar).
+    Para ODBC Driver 18 (Linux/Ubuntu): configura Encrypt y TrustServerCertificate via entorno.
     """
     DB_SERVER = os.environ.get('DB_SERVER', r'RELIX-SQL01\SOFTLAND')
     DB_NAME = os.environ.get('DB_NAME', 'ZDESARROLLO')
@@ -78,6 +79,8 @@ class SoftlandConfig(Config):
     DB_PASS = (os.environ.get('DB_PASS') or '').strip()
     DB_DRIVER = os.environ.get('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
     DB_TIMEOUT = int(os.environ.get('SOFTLAND_TIMEOUT', 15))
+    DB_ENCRYPT = os.environ.get('SOFTLAND_ENCRYPT', 'no').lower()
+    DB_TRUST_CERT = os.environ.get('SOFTLAND_TRUST_CERT', 'yes').lower()
 
     @classmethod
     def get_connection_string(cls):
@@ -85,7 +88,7 @@ class SoftlandConfig(Config):
             raise ValueError(
                 'Softland no configurado: defina DB_SERVER y DB_NAME en el entorno o .env.'
             )
-        return (
+        conn_str = (
             f"Driver={{{cls.DB_DRIVER}}};"
             f"Server={cls.DB_SERVER};"
             f"Database={cls.DB_NAME};"
@@ -93,9 +96,16 @@ class SoftlandConfig(Config):
             f"PWD={cls.DB_PASS};"
             f"ApplicationIntent=ReadOnly;"
         )
+        # Para ODBC Driver 18: agregar Encrypt y TrustServerCertificate
+        if 'Driver 18' in cls.DB_DRIVER:
+            conn_str += f"Encrypt={cls.DB_ENCRYPT};"
+            conn_str += f"TrustServerCertificate={cls.DB_TRUST_CERT};"
+        return conn_str
 
 class LocalDbConfig(Config):
-    """Base local (tracking / usuarios): SQLAlchemy + pyodbc deben usar la misma cadena lógica."""
+    """Base local (tracking / usuarios): SQLAlchemy + pyodbc deben usar la misma cadena lógica.
+    Para ODBC Driver 18 (Linux/Ubuntu): configura Encrypt y TrustServerCertificate via entorno.
+    """
 
     LOCAL_DB_NAME = os.environ.get('LOCAL_DB_NAME', 'Softland_Mock')
     LOCAL_SERVER = os.environ.get('LOCAL_SERVER', r'5CD5173D14\SQLEXPRESS')
@@ -103,45 +113,64 @@ class LocalDbConfig(Config):
     # En Linux / Docker use autenticación SQL (obligatorio si no hay Kerberos):
     LOCAL_DB_USER = (os.environ.get('LOCAL_DB_USER') or '').strip()
     LOCAL_DB_PASS = (os.environ.get('LOCAL_DB_PASS') or '').strip()
+    LOCAL_DB_ENCRYPT = os.environ.get('LOCAL_DB_ENCRYPT', 'no').lower()
+    LOCAL_DB_TRUST_CERT = os.environ.get('LOCAL_DB_TRUST_CERT', 'yes').lower()
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     @classmethod
     def build_sqlalchemy_uri(cls) -> str:
-        """URI única para Flask-SQLAlchemy (mssql+pyodbc)."""
+        """URI única para Flask-SQLAlchemy (mssql+pyodbc).
+        Para ODBC Driver 18, incluye Encrypt y TrustServerCertificate.
+        """
         odbc_driver = urllib.parse.quote_plus(cls.DB_DRIVER)
         server = cls.LOCAL_SERVER.replace(' ', '%20')
         dbn = urllib.parse.quote_plus(cls.LOCAL_DB_NAME)
+
+        # Parámetros base
+        params = [f'driver={odbc_driver}']
+
+        # Para ODBC Driver 18: agregar Encrypt y TrustServerCertificate
+        if 'Driver 18' in cls.DB_DRIVER:
+            params.append(f'Encrypt={cls.LOCAL_DB_ENCRYPT}')
+            params.append(f'TrustServerCertificate={cls.LOCAL_DB_TRUST_CERT}')
+
+        query_string = '&'.join(params)
+
         if cls.LOCAL_DB_USER and cls.LOCAL_DB_PASS:
             user = urllib.parse.quote_plus(cls.LOCAL_DB_USER)
             pwd = urllib.parse.quote_plus(cls.LOCAL_DB_PASS)
-            return (
-                f'mssql+pyodbc://{user}:{pwd}@{server}/{dbn}?driver={odbc_driver}'
-            )
-        return (
-            f'mssql+pyodbc://@{server}/{dbn}?driver={odbc_driver}&Trusted_Connection=yes'
-        )
+            return f'mssql+pyodbc://{user}:{pwd}@{server}/{dbn}?{query_string}'
+
+        # Agregar Trusted_Connection=yes solo si no hay usuario/contraseña
+        params.append('Trusted_Connection=yes')
+        query_string = '&'.join(params)
+        return f'mssql+pyodbc://@{server}/{dbn}?{query_string}'
 
     @classmethod
     def get_pyodbc_connection_string(cls) -> str:
         """
         Cadena ODBC para DatabaseConnection (panel) y herramientas que no pasan por SQLAlchemy.
         En producción Linux: defina LOCAL_DB_USER y LOCAL_DB_PASS (no use Trusted_Connection).
+        Para ODBC Driver 18: incluye Encrypt y TrustServerCertificate.
         """
-        if cls.LOCAL_DB_USER and cls.LOCAL_DB_PASS:
-            return (
-                f'Driver={{{cls.DB_DRIVER}}};'
-                f'Server={cls.LOCAL_SERVER};'
-                f'Database={cls.LOCAL_DB_NAME};'
-                f'UID={cls.LOCAL_DB_USER};'
-                f'PWD={cls.LOCAL_DB_PASS};'
-            )
-        return (
+        base_str = (
             f'Driver={{{cls.DB_DRIVER}}};'
             f'Server={cls.LOCAL_SERVER};'
             f'Database={cls.LOCAL_DB_NAME};'
-            f'Trusted_Connection=yes;'
         )
+
+        if cls.LOCAL_DB_USER and cls.LOCAL_DB_PASS:
+            base_str += f'UID={cls.LOCAL_DB_USER};PWD={cls.LOCAL_DB_PASS};'
+        else:
+            base_str += 'Trusted_Connection=yes;'
+
+        # Para ODBC Driver 18: agregar Encrypt y TrustServerCertificate
+        if 'Driver 18' in cls.DB_DRIVER:
+            base_str += f'Encrypt={cls.LOCAL_DB_ENCRYPT};'
+            base_str += f'TrustServerCertificate={cls.LOCAL_DB_TRUST_CERT};'
+
+        return base_str
 
 
 LocalDbConfig.SQLALCHEMY_DATABASE_URI = os.environ.get(
