@@ -114,12 +114,19 @@
                             <td>{{ u[2] }}</td>
                             <td class="small">{{ u[3] }}</td>
                             <td><span class="badge bg-secondary">{{ u[4] }}</span></td>
-                            <td class="small" style="max-width: 14rem;">
+                            <td style="max-width: 22rem;">
                                 {% if u[4] == 'FAENA' %}
                                     {% if u[6] %}
-                                        <span class="text-break d-block" title="{{ u[6] }}">{{ u[6] }}</span>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            {% for cc_item in u[6].split(',') %}
+                                            {% set cc_trimmed = cc_item.strip() %}
+                                            {% if cc_trimmed %}
+                                            <span class="badge bg-light text-dark border" style="font-size:.7rem; font-weight:500;">{{ cc_trimmed }}</span>
+                                            {% endif %}
+                                            {% endfor %}
+                                        </div>
                                     {% else %}
-                                        <span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Sin asignar</span>
+                                        <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Sin asignar</span>
                                     {% endif %}
                                 {% else %}
                                     <span class="text-muted">—</span>

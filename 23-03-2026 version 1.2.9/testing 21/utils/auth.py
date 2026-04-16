@@ -3,11 +3,14 @@ from functools import wraps
 from flask import session, redirect, url_for, flash, request
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from utils.permissions import roles_for, ALL_ROLES, ROLE_DESCRIPTIONS, ROLE_PERMISSIONS  # noqa: F401  – re-export
+
 ROLE_ALIASES = {
     'SUPERADMIN': {'SUPERADMIN'},
     'BODEGA': {'BODEGA'},
     'VISUALIZADOR': {'VISUALIZADOR'},
     'FAENA': {'FAENA'},
+    'SUPERVISOR_CONTRATO': {'SUPERVISOR_CONTRATO'},
     # Compatibilidad con perfiles legacy.
     'ADMIN': {'SUPERADMIN'},
     'ADMINISTRADOR': {'SUPERADMIN'},
@@ -41,10 +44,22 @@ def validate_password_strength(password):
     return True, ""
 
 def sanitize_input(text, input_type=None):
-    """Sanitiza entrada básica para prevenir SQL Injection básico (aunque usemos preventions en DB)"""
+    """
+    Limpia entradas de formulario.
+    - 'usuario': solo permite letras, números, puntos, guiones y guiones bajos.
+    - Otros tipos: elimina únicamente caracteres que rompen SQL sin ser parte de
+      queries parametrizadas (las queries siempre usan parámetros ?).
+      Se preservan caracteres válidos en nombres, emails y textos libres.
+    """
     if not text:
         return text
-    return re.sub(r'[\';"()=]', '', str(text))
+    text = str(text)
+    if input_type == 'usuario':
+        # Usernames: solo alfanuméricos + . - _
+        return re.sub(r'[^\w.\-]', '', text)
+    # Para texto libre y email: solo eliminamos ; que podría confundir parsers HTML;
+    # las comillas y paréntesis son válidos en nombres y direcciones.
+    return re.sub(r'[;]', '', text)
 
 def has_any_role(current_role, allowed_roles):
     """Evalua roles con equivalencias y jerarquía de superadmin."""

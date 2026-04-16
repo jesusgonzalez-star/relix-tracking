@@ -2,6 +2,10 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/img/favicon-16x16.png">
+    <link rel="manifest" href="/static/img/site.webmanifest">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalles Orden - ReliX Water Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -92,7 +96,20 @@
                                     </td>
                                     <td><span class="cc-cell">{{ producto.centro_costo_linea or 'Sin CC' }}</span></td>
                                     <td class="text-center"><span class="badge bg-secondary fs-6">{{ "{:,.2f}".format(producto.qty_solicitada or 0) }}</span></td>
-                                    <td class="text-center"><span class="badge bg-info text-dark fs-6">{{ "{:,.2f}".format(producto.qty_ingresada or 0) }}</span></td>
+                                    <td class="text-center">
+                                        {% set qty_faena = producto.qty_recibida_faena or 0 %}
+                                        {% set qty_sol = producto.qty_solicitada or 0 %}
+                                        {% set tiene_rec = producto.tiene_rechazo or False %}
+                                        {% if tiene_rec and qty_faena <= 0.0001 %}
+                                            <span class="badge bg-danger fs-6">{{ "{:,.2f}".format(qty_faena) }}</span>
+                                        {% elif qty_faena > 0.0001 and qty_faena < qty_sol - 0.0001 %}
+                                            <span class="badge bg-warning text-dark fs-6">{{ "{:,.2f}".format(qty_faena) }}</span>
+                                        {% elif qty_faena >= qty_sol - 0.0001 %}
+                                            <span class="badge bg-success fs-6">{{ "{:,.2f}".format(qty_faena) }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary fs-6">{{ "{:,.2f}".format(qty_faena) }}</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             {% elif orden.productos %}
@@ -121,6 +138,13 @@
                         </tbody>
                     </table>
                 </div>
+
+                {% if tiene_lineas_rechazadas %}
+                <div class="alert alert-danger d-flex align-items-center gap-2 shadow-sm mb-4" role="alert">
+                    <i class="bi bi-x-circle-fill fs-5"></i>
+                    <div><strong>Recepción rechazada en faena:</strong> Una o más líneas de esta orden fueron rechazadas por faena. Revisa el detalle de estados por línea a continuación.</div>
+                </div>
+                {% endif %}
 
                 {% if envios_por_guia %}
                 <div class="mb-4">
@@ -154,8 +178,9 @@
                                     {% set qprog = (d[3] if d|length > 3 else 0) %}
                                     {% set qenv = (d[4] if d|length > 4 else (d[3] if d|length > 3 else 0)) %}
                                     {% set qest = (d[5] if d|length > 5 else (d[4] if d|length > 4 else 'N/A')) %}
+                                    {% set motivo_rec = (d[6] if d|length > 6 else None) %}
                                     {% set rem = (qprog or 0) - (qenv or 0) %}
-                                    <tr>
+                                    <tr {% if (qest or '')|upper == 'RECHAZADO' %}class="table-danger"{% endif %}>
                                         <td>{{ d[0] if d[0] is not none else '-' }}</td>
                                         <td><code>{{ d[1] or 'N/A' }}</code></td>
                                         <td>{{ d[2] or 'Sin descripción' }}</td>
@@ -170,7 +195,17 @@
                                             <span class="text-muted">0,00</span>
                                             {% endif %}
                                         </td>
-                                        <td class="text-center"><span class="badge bg-secondary">{{ qest or 'N/A' }}</span></td>
+                                        <td class="text-center">
+                                            {% set est_upper = (qest or '')|upper %}
+                                            <span class="badge {% if est_upper == 'RECHAZADO' %}bg-danger{% elif est_upper == 'ENTREGADO' %}bg-success{% elif est_upper == 'PARCIAL' %}bg-warning text-dark{% elif est_upper == 'EN_RUTA' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                                                {{ qest or 'N/A' }}
+                                            </span>
+                                            {% if est_upper == 'RECHAZADO' and motivo_rec %}
+                                            <div class="small text-danger mt-1" title="Motivo de rechazo">
+                                                <i class="bi bi-chat-left-text me-1"></i>{{ motivo_rec }}
+                                            </div>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -211,8 +246,9 @@
                             {% set qprog = (d[3] if d|length > 3 else 0) %}
                             {% set qenv = (d[4] if d|length > 4 else (d[3] if d|length > 3 else 0)) %}
                             {% set qest = (d[5] if d|length > 5 else (d[4] if d|length > 4 else 'N/A')) %}
+                            {% set motivo_rec = (d[6] if d|length > 6 else None) %}
                             {% set rem = (qprog or 0) - (qenv or 0) %}
-                            <tr>
+                            <tr {% if (qest or '')|upper == 'RECHAZADO' %}class="table-danger"{% endif %}>
                                 <td>{{ d[0] if d[0] is not none else '-' }}</td>
                                 <td><code>{{ d[1] or 'N/A' }}</code></td>
                                 <td>{{ d[2] or 'Sin descripción' }}</td>
@@ -227,7 +263,17 @@
                                     <span class="text-muted">0,00</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-center"><span class="badge bg-secondary">{{ qest or 'N/A' }}</span></td>
+                                <td class="text-center">
+                                    {% set est_upper = (qest or '')|upper %}
+                                    <span class="badge {% if est_upper == 'RECHAZADO' %}bg-danger{% elif est_upper == 'ENTREGADO' %}bg-success{% elif est_upper == 'PARCIAL' %}bg-warning text-dark{% elif est_upper == 'EN_RUTA' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                                        {{ qest or 'N/A' }}
+                                    </span>
+                                    {% if est_upper == 'RECHAZADO' and motivo_rec %}
+                                    <div class="small text-danger mt-1">
+                                        <i class="bi bi-chat-left-text me-1"></i>{{ motivo_rec }}
+                                    </div>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

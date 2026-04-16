@@ -58,9 +58,9 @@ class Config:
     RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'True').lower() == 'true'
     RATELIMIT_API = os.environ.get('RATELIMIT_API', '60 per minute')
     # Endurecimientos graduales (compatibles, apagados por defecto).
-    LOGIN_RATE_LIMIT_ENABLED = os.environ.get('LOGIN_RATE_LIMIT_ENABLED', 'False').lower() == 'true'
+    LOGIN_RATE_LIMIT_ENABLED = os.environ.get('LOGIN_RATE_LIMIT_ENABLED', 'True').lower() == 'true'
     RATELIMIT_LOGIN = os.environ.get('RATELIMIT_LOGIN', '10 per minute')
-    CSRF_ENABLED = os.environ.get('CSRF_ENABLED', 'False').lower() == 'true'
+    CSRF_ENABLED = os.environ.get('CSRF_ENABLED', 'True').lower() == 'true'
     HIDE_DEMO_CREDENTIALS = os.environ.get('HIDE_DEMO_CREDENTIALS', 'True').lower() == 'true'
     # Si True, POST /api/tracking exige que la OC exista en Softland.
     TRACKING_VALIDATE_OC_IN_SOFTLAND = (
@@ -77,6 +77,7 @@ class SoftlandConfig(Config):
     DB_USER = os.environ.get('DB_USER', 'JGonzalez')
     DB_PASS = (os.environ.get('DB_PASS') or '').strip()
     DB_DRIVER = os.environ.get('DB_DRIVER', 'ODBC Driver 17 for SQL Server')
+    DB_TIMEOUT = int(os.environ.get('SOFTLAND_TIMEOUT', 15))
 
     @classmethod
     def get_connection_string(cls):

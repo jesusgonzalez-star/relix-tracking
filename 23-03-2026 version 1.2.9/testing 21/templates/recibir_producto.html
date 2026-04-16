@@ -2,6 +2,10 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/img/favicon-16x16.png">
+    <link rel="manifest" href="/static/img/site.webmanifest">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recibir Producto</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -207,7 +211,7 @@
         {% if estado != 'Entregado' %}
         <div class="alert alert-info shadow-sm py-2" role="alert">
             <i class="bi bi-signpost-2 me-1"></i>
-            <strong>Paso a paso:</strong> valida la guía, sube evidencia, confirma checklist y luego presiona <em>Aceptar y marcar recibido</em>.
+            <strong>Paso a paso:</strong> valida la guía, sube evidencia, ajusta la cantidad recibida por línea (si hay artículos dañados o faltantes, reduce la cantidad e ingresa el motivo) y presiona <em>Confirmar recepción</em>.
         </div>
         {% endif %}
 
@@ -283,60 +287,69 @@
                         {% if despacho_items %}
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                                <label class="form-label mb-0">Productos de esta guía — cantidad que llegó a faena</label>
-                                <button type="button" id="toggleAllReceived" class="btn btn-outline-secondary btn-sm">
-                                    <i class="bi bi-check2-square me-1"></i>Marcar todo (máx. enviado)
+                                <label class="form-label mb-0">Detalle de productos a recepcionar</label>
+                                <button type="button" id="btnSetAllMax" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-check2-all me-1"></i>Restablecer todo a máximo
                                 </button>
                             </div>
+                            <div class="alert alert-info py-2 small mb-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Ajusta la cantidad a recepcionar por cada línea. Si recibes menos de lo enviado o rechazas un artículo, debes ingresar el motivo.
+                            </div>
                             <div class="table-responsive">
-                                <table class="table table-sm align-middle">
+                                <table class="table table-sm align-middle" id="recepcionTable">
                                     <thead>
                                         <tr>
-                                            <th style="width:52px;" title="Desmarcar si no llegó nada de esta línea">Recibí</th>
                                             <th>Línea</th>
                                             <th>Código</th>
                                             <th>Descripción</th>
-                                            <th class="text-end">Cantidad enviada</th>
-                                            <th style="min-width:7.5rem;">Cantidad que llegó</th>
-                                            <th class="text-end">Ya acum. OC <span class="text-muted fw-normal small">(otras guías)</span></th>
+                                            <th class="text-end">Enviada</th>
+                                            <th class="text-end" style="width:130px;">A recibir</th>
+                                            <th>Motivo daño / faltante</th>
+                                            <th class="text-end">Rec. acum. OC</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {% for it in despacho_items %}
-                                        {% set qmax = (it[4] or 0)|float %}
-                                        <tr class="receive-line-row" data-max-qty="{{ '%.4f'|format(qmax) }}">
-                                            <td class="text-center">
-                                                <input
-                                                    type="checkbox"
-                                                    class="form-check-input received-check"
-                                                    checked
-                                                    aria-label="Marcar si recibió algo de esta línea"
-                                                >
-                                            </td>
+                                        {% set qty_max = (it[4] or 0)|float %}
+                                        <tr id="row-item-{{ it[0] }}">
                                             <td>{{ it[1] if it[1] is not none else '-' }}</td>
                                             <td>{{ it[2] or 'N/A' }}</td>
                                             <td>{{ it[3] or 'Sin descripción' }}</td>
-                                            <td class="text-end">{{ '%.2f'|format(it[4] or 0) }}</td>
-                                            <td>
+                                            <td class="text-end fw-semibold">{{ '%.2f'|format(qty_max) }}</td>
+                                            <td class="text-end">
                                                 <input
                                                     type="number"
-                                                    class="form-control form-control-sm received-qty"
-                                                    name="qty_{{ it[0] }}"
+                                                    class="form-control form-control-sm text-end qty-recibida-input"
+                                                    name="cantidad_recibida_{{ it[0] }}"
+                                                    id="qty-{{ it[0] }}"
                                                     min="0"
+                                                    max="{{ '%.4f'|format(qty_max) }}"
                                                     step="0.01"
-                                                    max="{{ '%.4f'|format(qmax) }}"
-                                                    value="{{ '%.4f'|format(qmax) }}"
-                                                    inputmode="decimal"
-                                                    title="0 = no llegó; parcial o total hasta el máximo enviado en esta guía"
+                                                    value="{{ '%.2f'|format(qty_max) }}"
+                                                    data-max="{{ '%.4f'|format(qty_max) }}"
+                                                    data-id="{{ it[0] }}"
                                                 >
                                             </td>
-                                            <td class="text-end">{% if it|length > 6 %}{{ '%.2f'|format(it[6] or 0) }}{% else %}0.00{% endif %}</td>
+                                            <td>
+                                                <div id="motivo-wrap-{{ it[0] }}" style="display:none">
+                                                    <textarea
+                                                        class="form-control form-control-sm motivo-rechazo-input"
+                                                        name="motivo_rechazo_{{ it[0] }}"
+                                                        id="motivo-{{ it[0] }}"
+                                                        rows="2"
+                                                        placeholder="Motivo de daño, faltante o rechazo (requerido)"
+                                                    ></textarea>
+                                                </div>
+                                                <span id="motivo-ok-{{ it[0] }}" class="badge bg-success"><i class="bi bi-check-lg"></i> Completo</span>
+                                            </td>
+                                            <td class="text-end text-muted small">{{ '%.2f'|format(it[6] or 0) if it|length > 6 else '0.00' }}</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
-                            <small class="text-muted">Desmarca la casilla o pon <strong>0</strong> si no llegó nada. Si llegó menos (ej. 10 de 20), indica la cantidad real. Debe haber al menos una cantidad mayor a cero para cerrar la recepción de la guía.</small>
+                            <div id="recepcionResumen" class="small mt-1 text-muted"></div>
                         </div>
                         {% endif %}
 
@@ -346,7 +359,7 @@
                         </div>
                         <input type="hidden" name="geolocation" id="geolocation">
                         <button type="submit" class="btn btn-success w-100">
-                            <i class="bi bi-upload me-1"></i> Aceptar y marcar recibido
+                            <i class="bi bi-upload me-1"></i> Confirmar recepción
                         </button>
                     </form>
                 </div>
@@ -385,93 +398,80 @@
             geoPreview.value = 'Geolocalización no soportada';
         }
 
-        // Cantidades por línea: checkbox = no llegó nada (0) vs permitir cantidad
+        // Recepción parcial: mostrar/ocultar motivo y actualizar resumen
         (function () {
-            const toggleBtn = document.getElementById('toggleAllReceived');
-            const rows = Array.from(document.querySelectorAll('.receive-line-row'));
+            const qtyInputs = Array.from(document.querySelectorAll('.qty-recibida-input'));
+            const resumenEl = document.getElementById('recepcionResumen');
             const checklistCounter = document.getElementById('checklistCounter');
-            if (rows.length === 0) return;
-            function parseMax(row) {
-                const v = parseFloat(row.getAttribute('data-max-qty') || '0');
-                return isNaN(v) ? 0 : v;
-            }
-            function qtyInput(row) {
-                return row.querySelector('.received-qty');
-            }
-            function checkEl(row) {
-                return row.querySelector('.received-check');
-            }
-            function syncRowFromCheck(row) {
-                const cb = checkEl(row);
-                const inp = qtyInput(row);
-                if (!cb || !inp) return;
-                if (!cb.checked) {
-                    inp.value = '0';
-                    inp.readOnly = true;
-                    inp.classList.add('bg-light');
-                } else {
-                    inp.readOnly = false;
-                    inp.classList.remove('bg-light');
-                    const mx = parseMax(row);
-                    const cur = parseFloat(String(inp.value).replace(',', '.')) || 0;
-                    if (cur <= 0 && mx > 0) inp.value = mx.toFixed(4).replace(/\.?0+$/, '');
+            const btnSetAllMax = document.getElementById('btnSetAllMax');
+
+            function updateRow(input) {
+                const id = input.dataset.id;
+                const max = parseFloat(input.dataset.max) || 0;
+                const val = parseFloat(input.value) || 0;
+                const motivoWrap = document.getElementById('motivo-wrap-' + id);
+                const motivoOk = document.getElementById('motivo-ok-' + id);
+                const motivoInput = document.getElementById('motivo-' + id);
+                const row = document.getElementById('row-item-' + id);
+
+                const needsMotivo = val < max - 0.0001;
+                if (motivoWrap) motivoWrap.style.display = needsMotivo ? '' : 'none';
+                if (motivoOk) motivoOk.style.display = needsMotivo ? 'none' : '';
+                if (motivoInput) motivoInput.required = needsMotivo;
+
+                if (row) {
+                    row.classList.remove('table-warning', 'table-danger', 'table-success');
+                    if (val <= 0.0001 && max > 0.0001) {
+                        row.classList.add('table-danger');
+                    } else if (needsMotivo) {
+                        row.classList.add('table-warning');
+                    } else {
+                        row.classList.add('table-success');
+                    }
                 }
             }
-            function allChecked() {
-                return rows.every((r) => checkEl(r).checked);
-            }
-            function updateCounter() {
-                if (!checklistCounter) return;
-                let n = 0;
-                rows.forEach((row) => {
-                    const inp = qtyInput(row);
-                    const cb = checkEl(row);
-                    if (!inp || !cb) return;
-                    const q = parseFloat(String(inp.value).replace(',', '.')) || 0;
-                    if (cb.checked && q > 0) n += 1;
+
+            function updateResumen() {
+                if (!resumenEl) return;
+                let parciales = 0, rechazados = 0, completos = 0;
+                qtyInputs.forEach(function (inp) {
+                    const max = parseFloat(inp.dataset.max) || 0;
+                    const val = parseFloat(inp.value) || 0;
+                    if (val <= 0.0001 && max > 0.0001) rechazados++;
+                    else if (val < max - 0.0001) parciales++;
+                    else completos++;
                 });
-                checklistCounter.textContent = `${n}/${rows.length} líneas con cantidad > 0`;
+                let parts = [];
+                if (completos > 0) parts.push(`<span class="text-success fw-semibold">${completos} línea(s) completa(s)</span>`);
+                if (parciales > 0) parts.push(`<span class="text-warning fw-semibold">${parciales} línea(s) parcial(es)</span>`);
+                if (rechazados > 0) parts.push(`<span class="text-danger fw-semibold">${rechazados} línea(s) rechazada(s)</span>`);
+                resumenEl.innerHTML = parts.length ? 'Resumen: ' + parts.join(' · ') : '';
+                if (checklistCounter) {
+                    checklistCounter.textContent = parciales + rechazados > 0
+                        ? `${parciales + rechazados} línea(s) con novedad`
+                        : `${completos}/${qtyInputs.length} completas`;
+                }
             }
-            rows.forEach((row) => {
-                const cb = checkEl(row);
-                const inp = qtyInput(row);
-                if (!cb || !inp) return;
-                cb.addEventListener('change', function () {
-                    syncRowFromCheck(row);
-                    updateCounter();
+
+            // Inicializar
+            qtyInputs.forEach(function (inp) {
+                updateRow(inp);
+                inp.addEventListener('input', function () {
+                    updateRow(inp);
+                    updateResumen();
                 });
-                inp.addEventListener('input', updateCounter);
             });
-            if (toggleBtn) {
-                toggleBtn.addEventListener('click', function () {
-                    const wantAll = !allChecked();
-                    rows.forEach((row) => {
-                        const cb = checkEl(row);
-                        const inp = qtyInput(row);
-                        if (!cb || !inp) return;
-                        cb.checked = wantAll;
-                        if (wantAll) {
-                            inp.readOnly = false;
-                            inp.classList.remove('bg-light');
-                            const mx = parseMax(row);
-                            inp.value = mx.toFixed(4).replace(/\.?0+$/, '');
-                        } else {
-                            inp.value = '0';
-                            inp.readOnly = true;
-                            inp.classList.add('bg-light');
-                        }
+            updateResumen();
+
+            if (btnSetAllMax) {
+                btnSetAllMax.addEventListener('click', function () {
+                    qtyInputs.forEach(function (inp) {
+                        inp.value = inp.dataset.max;
+                        updateRow(inp);
                     });
-                    toggleBtn.innerHTML = wantAll
-                        ? '<i class="bi bi-x-square me-1"></i>Desmarcar todo (0 en todo)'
-                        : '<i class="bi bi-check2-square me-1"></i>Marcar todo (máx. enviado)';
-                    updateCounter();
+                    updateResumen();
                 });
-                toggleBtn.innerHTML = allChecked()
-                    ? '<i class="bi bi-x-square me-1"></i>Desmarcar todo (0 en todo)'
-                    : '<i class="bi bi-check2-square me-1"></i>Marcar todo (máx. enviado)';
             }
-            rows.forEach((row) => syncRowFromCheck(row));
-            updateCounter();
         })();
     </script>
 </body>

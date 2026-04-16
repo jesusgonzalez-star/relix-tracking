@@ -1,6 +1,9 @@
+import logging
+
 from flask import Blueprint, current_app, request, jsonify
 from flasgger import swag_from
 from marshmallow import ValidationError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from models.tracking import DespachoTracking
 from schemas.tracking import (
@@ -12,6 +15,8 @@ from services.softland_service import SoftlandService
 from services.tracking_local_service import create_tracking_row
 from utils.api_auth import enforce_api_secret_before_request
 from utils.errors import APIError
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('tracking', __name__, url_prefix='/api/tracking')
 
@@ -74,6 +79,14 @@ def create_tracking():
         return jsonify(payload), 201 if created else 200
     except ValidationError as err:
         raise APIError('Error de validación', status_code=400, payload=err.messages)
+    except ValueError as err:
+        raise APIError(str(err), status_code=400)
+    except IntegrityError:
+        logger.warning("IntegrityError no recuperado en create_tracking para OC %s", request.json.get('num_oc'))
+        raise APIError('Conflicto de datos: posible registro duplicado', status_code=409)
+    except OperationalError:
+        logger.error("Error de conexión a BD en create_tracking", exc_info=True)
+        raise APIError('Base de datos no disponible', status_code=503)
 
 
 @bp.route('/oc/<int:num_oc>', methods=['GET'])

@@ -22,6 +22,9 @@ class DespachoTracking(db.Model):
     transportista_asignado_id = db.Column('transportista_asignado_id', db.Integer, nullable=True)
     # Idempotencia API (chofer / reintentos). Índice único filtrado en SQL Server vía migración manual opcional.
     api_idempotency_key = db.Column('ApiIdempotencyKey', db.String(64), nullable=True, unique=True, index=True)
+    # Auditoría: timestamps automáticos (requiere ALTER TABLE en BD existentes).
+    created_at = db.Column('CreatedAt', db.DateTime, nullable=True, server_default=db.func.now())
+    updated_at = db.Column('UpdatedAt', db.DateTime, nullable=True, server_default=db.func.now(), onupdate=db.func.now())
 
     def __repr__(self):
         return f'<DespachoTracking OC:{self.num_oc} Estado:{self.estado!r}>'

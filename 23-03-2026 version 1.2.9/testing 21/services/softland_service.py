@@ -10,10 +10,10 @@ class SoftlandService:
     def get_connection():
         """Obtiene una conexión Read-Only hacia el ERP"""
         try:
-            return pyodbc.connect(SoftlandConfig.get_connection_string(), timeout=15)
+            return pyodbc.connect(SoftlandConfig.get_connection_string(), timeout=SoftlandConfig.DB_TIMEOUT)
         except Exception as e:
-            logger.error(f"Error conectando a Softland: {e}")
-            raise APIError("No se pudo conectar al ERP Softland", status_code=503)
+            logger.error("Error conectando a Softland: %s", e)
+            raise APIError("No se pudo conectar al ERP Softland", status_code=503) from e
 
     @staticmethod
     def obtener_detalle_oc(num_oc: int):
@@ -81,8 +81,8 @@ class SoftlandService:
         except APIError:
             raise
         except Exception as e:
-            logger.error(f"Error consultando OC {num_oc}: {e}")
-            raise APIError("Error interno al consultar el ERP", status_code=500)
+            logger.error("Error consultando OC %s: %s", num_oc, e)
+            raise APIError("Error interno al consultar el ERP", status_code=500) from e
         finally:
             if conn:
                 conn.close()

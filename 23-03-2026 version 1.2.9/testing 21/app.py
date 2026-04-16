@@ -1,14 +1,26 @@
 import os
 import logging
+import warnings
+
 from flask import Flask, jsonify
 from flasgger import Swagger
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import LocalDbConfig, validate_local_db_sql_auth, validate_production_secrets
 from extensions import db, ma, limiter
 from utils.errors import register_error_handlers
-from routes import softland_routes, tracking_routes, frontend_routes
+from routes import softland_routes, tracking_routes
+from routes.frontend import bp as frontend_bp
 
-# Configurar Logging 
+# Suprimir el aviso de SQLAlchemy sobre la versión de SQL Server Express
+# (el driver funciona correctamente; el warning es cosmético de compatibilidad)
+warnings.filterwarnings(
+    'ignore',
+    message=r'.*Unrecognized server version info.*',
+    category=Warning,
+)
+
+# Configurar Logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -17,7 +29,12 @@ logging.basicConfig(
 def create_app(config_class=LocalDbConfig):
     """Factory method para crear e inicializar la aplicación Flask bajo Arquitectura Limpia"""
     app = Flask(__name__)
-    
+
+    # Soporte reverse proxy (Apache/Nginx): confía en X-Forwarded-For/Proto.
+    # Solo aplica si hay proxy delante; en Windows dev no afecta.
+    if os.environ.get('BEHIND_PROXY', 'False').lower() == 'true':
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     # Cargar configuraciones
     app.config.from_object(config_class)
     validate_production_secrets(app)
@@ -36,7 +53,9 @@ def create_app(config_class=LocalDbConfig):
         )
 
     # Configuraciones de Sesión (necesarias para el Frontend)
-    app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'False') == 'True'
+    # En producción (no DEBUG) activar Secure por defecto; en dev mantener False.
+    _cookie_secure_default = 'False' if app.config.get('DEBUG') else 'True'
+    app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', _cookie_secure_default) == 'True'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     
@@ -48,6 +67,7 @@ def create_app(config_class=LocalDbConfig):
     }
     
     # Inicializar Extensiones
+
     db.init_app(app)
     ma.init_app(app)
     limiter.init_app(app)
@@ -60,7 +80,7 @@ def create_app(config_class=LocalDbConfig):
     # Registrar Blueprints
     app.register_blueprint(softland_routes.bp)
     app.register_blueprint(tracking_routes.bp)
-    app.register_blueprint(frontend_routes.bp) # Monta la GUI en /
+    app.register_blueprint(frontend_bp)  # Monta la GUI en /
 
     if app.config.get('RATELIMIT_ENABLED', True):
         rl = app.config.get('RATELIMIT_API', '60 per minute')
@@ -85,6 +105,24 @@ def create_app(config_class=LocalDbConfig):
     with app.app_context():
         # Tablas locales según modelos SQLAlchemy (p. ej. DespachosTracking para API + panel).
         db.create_all()
+
+        # Asegurar índice único en ApiIdempotencyKey (puede faltar si la tabla
+        # se creó vía pyodbc antes de que el modelo SQLAlchemy lo definiera).
+        try:
+            db.session.execute(db.text(
+                "IF NOT EXISTS ("
+                "  SELECT 1 FROM sys.indexes "
+                "  WHERE object_id = OBJECT_ID('DespachosTracking') "
+                "    AND name = 'uq_despachostracking_idempotencykey'"
+                ") "
+                "CREATE UNIQUE NONCLUSTERED INDEX uq_despachostracking_idempotencykey "
+                "ON DespachosTracking(ApiIdempotencyKey) "
+                "WHERE ApiIdempotencyKey IS NOT NULL"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.debug('Índice uq_despachostracking_idempotencykey ya existe o no se pudo crear.')
 
     return app
 

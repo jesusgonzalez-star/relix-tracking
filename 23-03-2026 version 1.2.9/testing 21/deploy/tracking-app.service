@@ -1,0 +1,27 @@
+[Unit]
+Description=Tracking Logistico - Gunicorn WSGI Server
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/tracking-app
+EnvironmentFile=/etc/tracking-app/env
+
+ExecStart=/opt/tracking-app/.venv/bin/gunicorn -c gunicorn_config.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+
+# Seguridad (hardening systemd)
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/data/tracking/evidencias
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

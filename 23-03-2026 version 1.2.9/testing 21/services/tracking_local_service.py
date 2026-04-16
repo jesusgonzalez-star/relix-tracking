@@ -11,19 +11,21 @@ from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models.tracking import DespachoTracking
+from utils.states import API_TO_DB_ESTADO, VALID_TRACKING_STATES
 
 logger = logging.getLogger(__name__)
 
-API_TO_DB_ESTADO = {
-    'BODEGA': 'EN_BODEGA',
-    'TRANSITO': 'EN RUTA',
-    'ENTREGADO': 'ENTREGADO',
-}
-
 
 def map_api_estado_to_db(api_estado: str) -> str:
+    """Convierte estado API a estado BD. Lanza ValueError si el estado no es válido."""
     key = (api_estado or '').strip().upper()
-    return API_TO_DB_ESTADO.get(key, api_estado or 'INGRESADO')
+    db_estado = API_TO_DB_ESTADO.get(key)
+    if db_estado is None:
+        raise ValueError(
+            f"Estado API inválido: {api_estado!r}. "
+            f"Valores permitidos: {', '.join(sorted(API_TO_DB_ESTADO))}"
+        )
+    return db_estado
 
 
 def create_tracking_row(
@@ -66,6 +68,11 @@ def create_tracking_row(
             exc,
         )
         if key:
+            existing = DespachoTracking.query.filter_by(api_idempotency_key=key).first()
+            if existing is not None:
+                return existing, False
+            # Segundo intento: la fila puede tardar en ser visible (READ_COMMITTED).
+            db.session.expire_all()
             existing = DespachoTracking.query.filter_by(api_idempotency_key=key).first()
             if existing is not None:
                 return existing, False

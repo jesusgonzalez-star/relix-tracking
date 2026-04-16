@@ -2,6 +2,10 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/img/favicon-16x16.png">
+    <link rel="manifest" href="/static/img/site.webmanifest">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -52,8 +56,73 @@
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const alerts = document.querySelectorAll('.alert');
+                        alerts.forEach(function(alert) {
+                            setTimeout(function() {
+                                const bsAlert = new bootstrap.Alert(alert);
+                                bsAlert.close();
+                            }, 60000);
+                        });
+                    });
+                </script>
             {% endif %}
         {% endwith %}
+
+        <!-- Notificaciones de discrepancias en bodega -->
+        {% if session.get('notificaciones_bodega') %}
+        <div class="alert alert-warning alert-dismissible fade show shadow-sm mb-4" role="alert">
+            <h5 class="alert-heading mb-2">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Recepción con diferencias desde faena
+                <span class="badge bg-warning text-dark ms-2">{{ session.notificaciones_bodega|length }}</span>
+            </h5>
+            <p class="mb-2 text-muted small">Los siguientes productos llegaron con faltante o daño registrado:</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0 bg-white">
+                    <thead class="table-warning">
+                        <tr>
+                            <th>Guía</th><th>OC</th><th>Producto</th>
+                            <th>Enviado</th><th>Recibido</th><th>Estado</th>
+                            <th>Motivo</th><th>Recibido por</th><th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for n in session.notificaciones_bodega %}
+                        <tr>
+                            <td>{{ n.GuiaDespacho or '—' }}</td>
+                            <td>{{ n.NumOc }}</td>
+                            <td><strong>{{ n.CodProd }}</strong><br><small>{{ n.DescProd or '—' }}</small></td>
+                            <td>{{ n.CantEnviada }}</td>
+                            <td class="fw-bold text-danger">{{ n.CantRecibida }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'warning text-dark' if n.EstadoLinea == 'PARCIAL' else 'danger' }}">
+                                    {{ n.EstadoLinea }}
+                                </span>
+                            </td>
+                            <td><em>{{ n.MotivoRechazo or '—' }}</em></td>
+                            <td>{{ n.RecibidoPor or '—' }}</td>
+                            <td class="text-muted small">
+                                {% if n.FechaRecepcion %}
+                                    {% if n.FechaRecepcion.strftime %}
+                                        {{ n.FechaRecepcion.strftime('%d/%m/%Y %H:%M') }}
+                                    {% else %}
+                                        {{ n.FechaRecepcion }}
+                                    {% endif %}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% if session.pop('notificaciones_bodega', None) is not none %}{% endif %}
+        {% endif %}
 
         <!-- Estadísticas -->
         <div class="soft-panel p-3 p-md-4 mb-4">
@@ -141,7 +210,7 @@
                     </div>
                 </div>
                 <div class="actions-toolbar d-flex gap-2 align-items-center flex-wrap">
-                    <form id="dashboardFiltersForm" action="{{ url_for('frontend.index') }}" method="GET" class="d-flex align-items-end gap-2 flex-wrap">
+                    <form action="{{ url_for('frontend.index') }}" method="GET" class="d-flex align-items-end gap-2 flex-wrap">
                         {% if can_dispatch or can_view_global or can_receive %}
                         <div class="cc-filter-container" style="min-width: 14rem;">
                             <label for="fechaTipoFiltro" class="form-label mb-1 small text-muted">Fechas según</label>
@@ -177,9 +246,6 @@
                         {% if tracking_estado_selected %}
                         <input type="hidden" name="tracking_estado" value="{{ tracking_estado_selected }}">
                         {% endif %}
-                        {% if selected_dashboard_cc %}
-                        <input type="hidden" name="cc" id="dashboardCcHidden" value="{{ selected_dashboard_cc }}">
-                        {% endif %}
                     </form>
                     <div class="cc-filter-container">
                         <label for="costCenterFilter" class="visually-hidden">Filtrar por centro de costo</label>
@@ -188,9 +254,6 @@
                             {% for cc in (centros_costo_opciones or []) %}
                             <option value="{{ cc }}" {% if selected_dashboard_cc and cc == selected_dashboard_cc %}selected{% endif %}>{{ cc }}</option>
                             {% endfor %}
-                            {% if selected_dashboard_cc and selected_dashboard_cc not in (centros_costo_opciones or []) %}
-                            <option value="{{ selected_dashboard_cc }}" selected>{{ selected_dashboard_cc }}</option>
-                            {% endif %}
                         </select>
                     </div>
                     {% if can_dispatch or can_receive %}
@@ -200,6 +263,7 @@
                             <option value="" {% if not tracking_estado_selected %}selected{% endif %}>Todos los estados</option>
                             {% if server_cc_filter_mode %}
                             <option value="recepcion_parcial" {% if tracking_estado_selected == 'recepcion_parcial' %}selected{% endif %}>Recepción parcial</option>
+                            <option value="recepcion_rechazada" {% if tracking_estado_selected == 'recepcion_rechazada' %}selected{% endif %}>Recepción rechazada</option>
                             <option value="recepcion_completa" {% if tracking_estado_selected == 'recepcion_completa' %}selected{% endif %}>Recepción completa</option>
                             <option value="entrega_parcial_faena" {% if tracking_estado_selected == 'entrega_parcial_faena' %}selected{% endif %}>Entrega parcial (bodega → faena)</option>
                             <option value="en_ruta" {% if tracking_estado_selected == 'en_ruta' %}selected{% endif %}>En ruta (pendiente en faena)</option>
@@ -207,6 +271,7 @@
                             {% else %}
                             <option value="no_entregado" {% if tracking_estado_selected == 'no_entregado' %}selected{% endif %}>No entregado</option>
                             <option value="recepcion_parcial" {% if tracking_estado_selected == 'recepcion_parcial' %}selected{% endif %}>Recepción parcial</option>
+                            <option value="recepcion_rechazada" {% if tracking_estado_selected == 'recepcion_rechazada' %}selected{% endif %}>Recepción rechazada</option>
                             {% if can_receive %}
                             <option value="recepcion_completa" {% if tracking_estado_selected == 'recepcion_completa' %}selected{% endif %}>Recepción completa</option>
                             {% endif %}
@@ -345,7 +410,7 @@
                             {% endif %}
                             <td class="tracking-state-cell" data-tracking-state="{{ bodega_state if (can_dispatch or can_receive) else '' }}">
                                 <div class="d-flex flex-column align-items-start gap-1">
-                                    {% set bodega_bg = 'success' if bodega_state == 'Despacho completo desde bodega' else 'info text-dark' if bodega_state == 'Pendiente despacho a faena' or bodega_state_s.startswith('En ruta') else 'warning text-dark' if bodega_state == 'Recepción parcial' else 'secondary' %}
+                                    {% set bodega_bg = 'danger' if bodega_state == 'Recepción rechazada en faena' else 'success' if bodega_state == 'Despacho completo desde bodega' else 'info text-dark' if bodega_state == 'Pendiente despacho a faena' or bodega_state_s.startswith('En ruta') else 'warning text-dark' if bodega_state == 'Recepción parcial' else 'secondary' %}
                                     <span class="badge bg-{{ bodega_bg }} px-3 py-2 shadow-sm rounded-pill">
                                         {{ bodega_state }}
                                     </span>
@@ -549,9 +614,7 @@
         }
 
         const serverCcFilterMode = {{ 'true' if server_cc_filter_mode else 'false' }};
-        const dashboardCcUrlFilter = {{ 'true' if (dashboard_cc_url_filter | default(false)) else 'false' }};
-        const ccFilterUsesUrl = serverCcFilterMode || dashboardCcUrlFilter;
-        if (ccFilterUsesUrl) {
+        if (serverCcFilterMode) {
             costCenterFilter?.addEventListener('change', function () {
                 const url = new URL(window.location.href);
                 const selectedCc = (costCenterFilter?.value || '').trim();
@@ -574,12 +637,6 @@
             } else {
                 url.searchParams.delete('tracking_estado');
             }
-            const ccDash = document.getElementById('costCenterFilter');
-            if (ccDash && ccDash.value.trim()) {
-                url.searchParams.set('cc', ccDash.value.trim());
-            } else {
-                url.searchParams.delete('cc');
-            }
             const ft = document.getElementById('fechaTipoFiltro');
             if (ft && ft.value) {
                 url.searchParams.set('fecha_tipo', ft.value);
@@ -600,22 +657,8 @@
             window.location.href = url.toString();
         });
         loadCostCenterOptions();
-        document.getElementById('dashboardFiltersForm')?.addEventListener('submit', function () {
-            const ccSel = document.getElementById('costCenterFilter');
-            const v = (ccSel?.value || '').trim();
-            if (!v) return;
-            let hid = document.getElementById('dashboardCcHidden');
-            if (!hid) {
-                hid = document.createElement('input');
-                hid.type = 'hidden';
-                hid.name = 'cc';
-                hid.id = 'dashboardCcHidden';
-                this.appendChild(hid);
-            }
-            hid.value = v;
-        });
         try { localStorage.removeItem('dashboard_cc_filter'); } catch (e) { /* ignore */ }
-        if (!ccFilterUsesUrl) {
+        if (!serverCcFilterMode) {
             applyTableFilters();
         }
 
