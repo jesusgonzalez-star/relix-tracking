@@ -11,14 +11,13 @@ import pyodbc
 from utils.auth import login_required, has_any_role
 from utils.permissions import roles_for
 from utils.db_legacy import DatabaseConnection
+from utils.cc_helpers import fetch_faena_cc_for_user as _fetch_faena_cc_for_user
 from config import SoftlandConfig
 from routes.frontend import bp
 from routes.frontend._helpers import (
     _sanitize_next_url,
     _resolve_softland_column,
-    _normalize_cc_assignments,
     _build_softland_cc_match_clause,
-    _ensure_faena_cc_column,
     logger,
 )
 
@@ -109,16 +108,7 @@ def detalle_requisicion(folio):
         user_role_rq = session.get('rol')
         user_id_rq = session.get('user_id')
         if has_any_role(user_role_rq, ['FAENA']) and not has_any_role(user_role_rq, ['SUPERADMIN']):
-            conn_urq = DatabaseConnection.get_connection()
-            try:
-                cur_u = conn_urq.cursor()
-                _ensure_faena_cc_column(cur_u)
-                conn_urq.commit()
-                cur_u.execute("SELECT CentrosCostoAsignados FROM UsuariosSistema WHERE Id = ?", (user_id_rq,))
-                urow_rq = cur_u.fetchone()
-                faena_cc_rq = _normalize_cc_assignments(urow_rq[0] if urow_rq else '')
-            finally:
-                conn_urq.close()
+            faena_cc_rq = _fetch_faena_cc_for_user(user_id_rq)
             if not faena_cc_rq:
                 flash('No tiene centros de costo asignados para consultar requisiciones.', 'warning')
                 return redirect(url_for('frontend.index'))

@@ -27,10 +27,9 @@ from utils.recepcion_form import (
     verify_recepcion_form_token,
 )
 from utils.cc_helpers import (
-    normalize_cc_assignments as _normalize_cc_assignments,
     build_softland_cc_match_clause as _build_softland_cc_match_clause,
-    ensure_faena_cc_column as _ensure_faena_cc_column,
     get_faena_cc_assignments as _get_faena_cc_assignments,
+    fetch_faena_cc_for_user as _fetch_faena_cc_for_user,
     get_folios_by_centros_costo as _get_folios_by_centros_costo,
     folio_matches_centros_costo_tokens as _folio_matches_centros_costo_tokens,
     faena_user_has_cc_access_to_folio as _faena_user_has_cc_access_to_folio,
@@ -85,19 +84,7 @@ def faena_ordenes_cc():
     is_super = has_any_role(user_role, ['SUPERADMIN'])
     faena_cc = None
     if not is_super:
-        conn_u = DatabaseConnection.get_connection()
-        if not conn_u:
-            flash('Error de conexión', 'danger')
-            return redirect(url_for('frontend.index'))
-        try:
-            cu = conn_u.cursor()
-            _ensure_faena_cc_column(cu)
-            conn_u.commit()
-            cu.execute("SELECT CentrosCostoAsignados FROM UsuariosSistema WHERE Id = ?", (user_id,))
-            urow = cu.fetchone()
-            faena_cc = _normalize_cc_assignments(urow[0] if urow else '')
-        finally:
-            conn_u.close()
+        faena_cc = _fetch_faena_cc_for_user(user_id)
         if not faena_cc:
             flash('No tiene centros de costo asignados para consultar órdenes.', 'warning')
             return redirect(url_for('frontend.index'))
@@ -296,19 +283,7 @@ def faena_requisiciones():
     is_super = has_any_role(user_role, ['SUPERADMIN'])
     faena_cc = None
     if not is_super:
-        conn_u = DatabaseConnection.get_connection()
-        if not conn_u:
-            flash('Error de conexión', 'danger')
-            return redirect(url_for('frontend.index'))
-        try:
-            cu = conn_u.cursor()
-            _ensure_faena_cc_column(cu)
-            conn_u.commit()
-            cu.execute("SELECT CentrosCostoAsignados FROM UsuariosSistema WHERE Id = ?", (user_id,))
-            urow = cu.fetchone()
-            faena_cc = _normalize_cc_assignments(urow[0] if urow else '')
-        finally:
-            conn_u.close()
+        faena_cc = _fetch_faena_cc_for_user(user_id)
         if not faena_cc:
             flash('No tiene centros de costo asignados.', 'warning')
             return redirect(url_for('frontend.index'))

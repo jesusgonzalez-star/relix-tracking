@@ -124,8 +124,11 @@ _CSRF_PROTECTED_ENDPOINTS = {
     'frontend.registro',
     'frontend.despacho_bodega',
     'frontend.recibir_producto_envio',
+    'frontend.recibir_producto_folio_legacy',
     'frontend.gestionar_usuarios',
     'frontend.reset_local_tracking_data',
+    'frontend.importar_oc',
+    'frontend.verificar_qr',
 }
 
 

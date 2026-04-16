@@ -71,6 +71,20 @@ def get_faena_cc_assignments(cursor_local, user_id):
     return normalize_cc_assignments(row[0] if row else "")
 
 
+def fetch_faena_cc_for_user(user_id):
+    """Obtiene y normaliza los CC asignados a un usuario FAENA.
+
+    Abre y cierra su propia conexión a la BD local.
+    Retorna lista normalizada (vacía si no hay asignaciones).
+    """
+    conn = DatabaseConnection.get_connection()
+    try:
+        cursor = conn.cursor()
+        return get_faena_cc_assignments(cursor, user_id)
+    finally:
+        conn.close()
+
+
 def get_folios_by_centros_costo(cc_tokens):
     if not cc_tokens:
         return set()
@@ -119,8 +133,6 @@ def folio_matches_centros_costo_tokens(folio, cc_tokens):
 
 def faena_user_has_cc_access_to_folio(user_id, folio):
     conn_u = DatabaseConnection.get_connection()
-    if not conn_u:
-        return False
     try:
         cu = conn_u.cursor()
         cc_tokens = get_faena_cc_assignments(cu, user_id)

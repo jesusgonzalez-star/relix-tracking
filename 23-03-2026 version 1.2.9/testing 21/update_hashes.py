@@ -1,15 +1,8 @@
 import pyodbc
-import os
-from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
+from config import LocalDbConfig
 
-load_dotenv()
-CONN_STR = (
-    f"Driver={{{os.getenv('DB_DRIVER', 'ODBC Driver 17 for SQL Server')}}};"
-    f"Server={os.getenv('DB_SERVER', '5CD5173D14\\SQLEXPRESS')};"
-    f"Database={os.getenv('DB_NAME', 'Softland_Mock')};"
-    f"Trusted_Connection={os.getenv('DB_TRUSTED_CONNECTION', 'yes')};"
-)
+CONN_STR = LocalDbConfig.get_pyodbc_connection_string()
 
 try:
     conn = pyodbc.connect(CONN_STR)

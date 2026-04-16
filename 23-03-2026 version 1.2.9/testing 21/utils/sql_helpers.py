@@ -64,11 +64,5 @@ def softland_connection(timeout: int | None = None):
 @contextmanager
 def softland_cursor(timeout: int | None = None):
     """Versión simplificada que solo entrega el cursor."""
-    conn = pyodbc.connect(SoftlandConfig.get_connection_string(), timeout=timeout or SoftlandConfig.DB_TIMEOUT)
-    try:
-        yield conn.cursor()
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+    with softland_connection(timeout) as (conn, cursor):
+        yield cursor

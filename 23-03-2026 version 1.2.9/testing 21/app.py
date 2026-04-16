@@ -1,13 +1,11 @@
 import os
 import logging
 import warnings
-import re
-
 from flask import Flask, jsonify
 from flasgger import Swagger
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import LocalDbConfig, validate_local_db_sql_auth, validate_production_secrets, obfuscate_password_in_uri
+from config import LocalDbConfig, validate_production_secrets
 from extensions import db, ma, limiter
 from utils.errors import register_error_handlers
 from routes import softland_routes, tracking_routes
@@ -39,7 +37,6 @@ def create_app(config_class=LocalDbConfig):
     # Cargar configuraciones
     app.config.from_object(config_class)
     validate_production_secrets(app)
-    validate_local_db_sql_auth(app)
 
     default_secret = 'default-secret-key-123'
     if (not app.config.get('DEBUG')) and app.config.get('SECRET_KEY') == default_secret:
@@ -67,11 +64,10 @@ def create_app(config_class=LocalDbConfig):
         'description': 'API automatizada que interactúa con el ERP Softland (Sólo Lectura) y un gestor de estados de despacho local.'
     }
     
-    # Log de diagnóstico: URI de conexión (con contraseña ofuscada)
+    # Log de diagnóstico: URI de conexión local (SQLite)
     db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
     if db_uri:
-        obfuscated_uri = obfuscate_password_in_uri(db_uri)
-        app.logger.info(f'Base de datos local (SQLAlchemy): {obfuscated_uri}')
+        app.logger.info(f'Base de datos local (SQLite): {db_uri}')
 
     # Inicializar Extensiones
 
@@ -94,9 +90,32 @@ def create_app(config_class=LocalDbConfig):
         limiter.limit(rl)(softland_routes.bp)
         limiter.limit(rl)(tracking_routes.bp)
 
+    # Rate limit específico para login/registro (protección contra fuerza bruta)
+    if app.config.get('LOGIN_RATE_LIMIT_ENABLED', True):
+        login_rl = app.config.get('RATELIMIT_LOGIN', '10 per minute')
+        limiter.limit(login_rl)(frontend_bp)
+
     @app.after_request
-    def _no_cache_html_responses(response):
-        """Evita que el navegador o un proxy sirvan HTML del panel desactualizado."""
+    def _security_and_cache_headers(response):
+        """Headers de seguridad estándar + no-cache para HTML del panel."""
+        # ── Security headers ──
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+
+        if not app.config.get('DEBUG'):
+            response.headers['Strict-Transport-Security'] = (
+                'max-age=31536000; includeSubDomains'
+            )
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data:; "
+                "font-src 'self' https://cdn.jsdelivr.net"
+            )
+
+        # ── No-cache para HTML del panel ──
         ct = (response.headers.get('Content-Type') or '').lower()
         if 'text/html' in ct:
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -110,37 +129,10 @@ def create_app(config_class=LocalDbConfig):
 
     # Crear tablas locales si no existen según SQLAlchemy
     with app.app_context():
-        # Log de diagnóstico: cadena de conexión pyodbc (para herramientas legacy)
-        pyodbc_conn_str = LocalDbConfig.get_pyodbc_connection_string()
-        # Ofuscar la contraseña en el log (PWD=valor;)
-        obfuscated_pyodbc = re.sub(
-            r'PWD=[^;]*',
-            'PWD=***',
-            pyodbc_conn_str,
-            flags=re.IGNORECASE
-        )
-        app.logger.info(f'Base de datos local (pyodbc legacy): {obfuscated_pyodbc}')
+        app.logger.info(f'Base de datos local SQLite: {LocalDbConfig.LOCAL_DB_PATH}')
 
         # Tablas locales según modelos SQLAlchemy (p. ej. DespachosTracking para API + panel).
         db.create_all()
-
-        # Asegurar índice único en ApiIdempotencyKey (puede faltar si la tabla
-        # se creó vía pyodbc antes de que el modelo SQLAlchemy lo definiera).
-        try:
-            db.session.execute(db.text(
-                "IF NOT EXISTS ("
-                "  SELECT 1 FROM sys.indexes "
-                "  WHERE object_id = OBJECT_ID('DespachosTracking') "
-                "    AND name = 'uq_despachostracking_idempotencykey'"
-                ") "
-                "CREATE UNIQUE NONCLUSTERED INDEX uq_despachostracking_idempotencykey "
-                "ON DespachosTracking(ApiIdempotencyKey) "
-                "WHERE ApiIdempotencyKey IS NOT NULL"
-            ))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            app.logger.debug('Índice uq_despachostracking_idempotencykey ya existe o no se pudo crear.')
 
     return app
 

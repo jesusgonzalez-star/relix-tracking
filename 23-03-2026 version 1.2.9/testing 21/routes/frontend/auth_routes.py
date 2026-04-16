@@ -87,6 +87,7 @@ def get_evidencia(filename):
             """, (f"%/evidencias/{filename}", f"%\\evidencias\\{filename}", f"%{filename}"))
             row = cursor.fetchone()
         except Exception:
+            logger.warning('Error buscando evidencia %s en DespachosEnvio', filename, exc_info=True)
             row = None
         if not row:
             cursor.execute("""

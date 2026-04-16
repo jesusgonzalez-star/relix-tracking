@@ -1,17 +1,24 @@
 """Constantes canónicas de estado para tracking y líneas de envío.
 
 Módulo centralizado: importar desde aquí en lugar de duplicar strings.
+
+NOTA sobre convención de nombres:
+  - Los valores canónicos coinciden con lo almacenado en la BD local.
+  - Algunos usan mixed-case ('En Ruta', 'Entregado') por razones legacy;
+    cambiarlos requiere migración de datos en tablas existentes.
+  - Usar siempre _state_in() o normalize_state() de _helpers.py para
+    comparaciones, NUNCA comparar con == directamente.
 """
 
 # ── Estados de cabecera DespachosTracking / DespachosEnvio ────────────
 ST_INGRESADO = 'INGRESADO'
 ST_EN_BODEGA = 'EN_BODEGA'
-ST_EN_RUTA = 'En Ruta'
-ST_ENTREGADO = 'Entregado'
+ST_EN_RUTA = 'En Ruta'               # legacy: mixed-case almacenado en BD
+ST_ENTREGADO = 'Entregado'           # legacy: mixed-case almacenado en BD
 ST_CANCELADO = 'CANCELADO'
 ST_ANULADO = 'ANULADO'
 ST_PENDIENTE_SOFTLAND = 'PENDIENTE_EN_SOFTLAND'
-ST_DISPONIBLE_BODEGA = 'DISPONIBLE EN BODEGA'
+ST_DISPONIBLE_BODEGA = 'DISPONIBLE EN BODEGA'  # legacy: con espacios en BD
 
 # Conjunto de todos los estados válidos para inserción/actualización
 VALID_TRACKING_STATES = frozenset({

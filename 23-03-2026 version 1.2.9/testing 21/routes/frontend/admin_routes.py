@@ -104,7 +104,26 @@ def gestionar_usuarios():
                           AND c_ref.name = 'Id'
                     """)
                     fk_columns = cursor.fetchall()
+
+                    # Whitelist: solo tablas/columnas conocidas de la app local.
+                    _ALLOWED_FK_TABLES = {
+                        'DespachosTracking', 'DespachosEnvio',
+                        'DespachosEnvioDetalle', 'NotificacionesBodega',
+                    }
                     for table_name, column_name in fk_columns:
+                        if table_name not in _ALLOWED_FK_TABLES:
+                            logger.warning(
+                                'FK reasignación omitida: tabla %s no está en whitelist',
+                                table_name,
+                            )
+                            continue
+                        # Validar que column_name solo contenga caracteres seguros
+                        if not column_name.isidentifier():
+                            logger.warning(
+                                'FK reasignación omitida: columna %s no es identificador válido',
+                                column_name,
+                            )
+                            continue
                         cursor.execute(
                             f"UPDATE [{table_name}] SET [{column_name}] = ? WHERE [{column_name}] = ?",
                             (actor_id, usuario_id),

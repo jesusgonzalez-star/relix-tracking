@@ -33,6 +33,7 @@ from utils.cc_helpers import (
     build_softland_cc_match_clause as _build_softland_cc_match_clause,
     ensure_faena_cc_column as _ensure_faena_cc_column,
     get_faena_cc_assignments as _get_faena_cc_assignments,
+    fetch_faena_cc_for_user as _fetch_faena_cc_for_user,
 )
 
 from routes.frontend import bp
@@ -183,14 +184,7 @@ def recepcion_bodega(folio):
                     conn_softland.close()
 
         if has_any_role(user_role, ['FAENA']) and not has_any_role(user_role, ['SUPERADMIN']):
-            conn_u = DatabaseConnection.get_connection()
-            try:
-                cu = conn_u.cursor()
-                cu.execute("SELECT CentrosCostoAsignados FROM UsuariosSistema WHERE Id = ?", (user_id,))
-                urow = cu.fetchone()
-                faena_cc = _normalize_cc_assignments(urow[0] if urow else "")
-            finally:
-                conn_u.close()
+            faena_cc = _fetch_faena_cc_for_user(user_id)
             if not faena_cc:
                 flash('No tiene centros de costo asignados para consultar órdenes.', 'warning')
                 return redirect(url_for('frontend.index'))
@@ -291,6 +285,7 @@ def recepcion_bodega(folio):
                     """, (folio,))
                     detalle_local = c_local.fetchall()
                 except Exception:
+                    logger.warning('Error cargando DespachosEnvioDetalle para OC %s', folio, exc_info=True)
                     detalle_local = []
                 if not detalle_local:
                     c_local.execute("""
@@ -513,6 +508,7 @@ def despacho_bodega(folio):
                     try:
                         qty_send = Decimal(qty_raw)
                     except Exception:
+                        logger.warning('Cantidad inválida "%s" para item %s en OC %s, se omite la línea', qty_raw, idx, folio)
                         qty_send = Decimal('0')
                     if qty_send <= 0:
                         continue
