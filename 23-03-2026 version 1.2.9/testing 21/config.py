@@ -1,8 +1,27 @@
 import os
+import re
 import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def obfuscate_password_in_uri(uri: str) -> str:
+    """
+    Ofusca la contraseña en una URI SQLAlchemy para logging seguro.
+    Soporta formatos:
+    - mssql+pyodbc://user:password@host/db?...
+    - mssql+pyodbc://@host/db?... (Trusted Connection)
+    """
+    if not uri:
+        return uri
+    # Reemplaza la contraseña (entre : y @) con ***
+    return re.sub(
+        r'(mssql\+pyodbc://[^:]*:)[^@]*(@)',
+        r'\1***\2',
+        uri,
+        flags=re.IGNORECASE
+    )
 
 
 def validate_production_secrets(app):
@@ -84,6 +103,15 @@ class SoftlandConfig(Config):
 
     @classmethod
     def get_connection_string(cls):
+        """
+        Cadena de conexión para pyodbc a ERP Softland (solo lectura).
+        Para ODBC Driver 18+: incluye automáticamente Encrypt y TrustServerCertificate.
+
+        Robustez:
+        - Soporta servidores con instancia SQL nombrada
+        - Valida parámetros de seguridad para Driver 18
+        - Usa ApplicationIntent=ReadOnly para optimización
+        """
         if not (cls.DB_SERVER and cls.DB_NAME):
             raise ValueError(
                 'Softland no configurado: defina DB_SERVER y DB_NAME en el entorno o .env.'
@@ -96,10 +124,19 @@ class SoftlandConfig(Config):
             f"PWD={cls.DB_PASS};"
             f"ApplicationIntent=ReadOnly;"
         )
-        # Para ODBC Driver 18: agregar Encrypt y TrustServerCertificate
+        # Para ODBC Driver 18+: agregar Encrypt y TrustServerCertificate
         if 'Driver 18' in cls.DB_DRIVER:
-            conn_str += f"Encrypt={cls.DB_ENCRYPT};"
-            conn_str += f"TrustServerCertificate={cls.DB_TRUST_CERT};"
+            encrypt_val = cls.DB_ENCRYPT.lower() if cls.DB_ENCRYPT else 'no'
+            trust_cert_val = cls.DB_TRUST_CERT.lower() if cls.DB_TRUST_CERT else 'yes'
+
+            # Validar valores permitidos
+            if encrypt_val not in ('yes', 'no', 'optional', 'mandatory'):
+                encrypt_val = 'no'
+            if trust_cert_val not in ('yes', 'no', 'true', 'false'):
+                trust_cert_val = 'yes'
+
+            conn_str += f"Encrypt={encrypt_val};"
+            conn_str += f"TrustServerCertificate={trust_cert_val};"
         return conn_str
 
 class LocalDbConfig(Config):
@@ -120,8 +157,15 @@ class LocalDbConfig(Config):
 
     @classmethod
     def build_sqlalchemy_uri(cls) -> str:
-        """URI única para Flask-SQLAlchemy (mssql+pyodbc).
-        Para ODBC Driver 18, incluye Encrypt y TrustServerCertificate.
+        """
+        URI única para Flask-SQLAlchemy (mssql+pyodbc).
+        Para ODBC Driver 18+, incluye automáticamente Encrypt y TrustServerCertificate
+        según variables de entorno (LOCAL_DB_ENCRYPT, LOCAL_DB_TRUST_CERT).
+
+        Robustez:
+        - Soporta servidores con espacios en el nombre
+        - Codifica URL-safe todos los parámetros
+        - Valida parámetros de seguridad para Driver 18
         """
         odbc_driver = urllib.parse.quote_plus(cls.DB_DRIVER)
         server = cls.LOCAL_SERVER.replace(' ', '%20')
@@ -132,8 +176,17 @@ class LocalDbConfig(Config):
 
         # Para ODBC Driver 18: agregar Encrypt y TrustServerCertificate
         if 'Driver 18' in cls.DB_DRIVER:
-            params.append(f'Encrypt={cls.LOCAL_DB_ENCRYPT}')
-            params.append(f'TrustServerCertificate={cls.LOCAL_DB_TRUST_CERT}')
+            encrypt_val = cls.LOCAL_DB_ENCRYPT.lower() if cls.LOCAL_DB_ENCRYPT else 'no'
+            trust_cert_val = cls.LOCAL_DB_TRUST_CERT.lower() if cls.LOCAL_DB_TRUST_CERT else 'yes'
+
+            # Validar valores permitidos
+            if encrypt_val not in ('yes', 'no', 'optional', 'mandatory'):
+                encrypt_val = 'no'
+            if trust_cert_val not in ('yes', 'no', 'true', 'false'):
+                trust_cert_val = 'yes'
+
+            params.append(f'Encrypt={encrypt_val}')
+            params.append(f'TrustServerCertificate={trust_cert_val}')
 
         query_string = '&'.join(params)
 
@@ -152,7 +205,12 @@ class LocalDbConfig(Config):
         """
         Cadena ODBC para DatabaseConnection (panel) y herramientas que no pasan por SQLAlchemy.
         En producción Linux: defina LOCAL_DB_USER y LOCAL_DB_PASS (no use Trusted_Connection).
-        Para ODBC Driver 18: incluye Encrypt y TrustServerCertificate.
+        Para ODBC Driver 18+: incluye automáticamente Encrypt y TrustServerCertificate.
+
+        Robustez:
+        - Soporta servidores con o sin instancia SQL
+        - Valida parámetros de seguridad para Driver 18
+        - Maneja credenciales SQL con seguridad
         """
         base_str = (
             f'Driver={{{cls.DB_DRIVER}}};'
@@ -165,10 +223,19 @@ class LocalDbConfig(Config):
         else:
             base_str += 'Trusted_Connection=yes;'
 
-        # Para ODBC Driver 18: agregar Encrypt y TrustServerCertificate
+        # Para ODBC Driver 18+: agregar Encrypt y TrustServerCertificate
         if 'Driver 18' in cls.DB_DRIVER:
-            base_str += f'Encrypt={cls.LOCAL_DB_ENCRYPT};'
-            base_str += f'TrustServerCertificate={cls.LOCAL_DB_TRUST_CERT};'
+            encrypt_val = cls.LOCAL_DB_ENCRYPT.lower() if cls.LOCAL_DB_ENCRYPT else 'no'
+            trust_cert_val = cls.LOCAL_DB_TRUST_CERT.lower() if cls.LOCAL_DB_TRUST_CERT else 'yes'
+
+            # Validar valores permitidos
+            if encrypt_val not in ('yes', 'no', 'optional', 'mandatory'):
+                encrypt_val = 'no'
+            if trust_cert_val not in ('yes', 'no', 'true', 'false'):
+                trust_cert_val = 'yes'
+
+            base_str += f'Encrypt={encrypt_val};'
+            base_str += f'TrustServerCertificate={trust_cert_val};'
 
         return base_str
 

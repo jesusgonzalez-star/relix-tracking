@@ -1,12 +1,13 @@
 import os
 import logging
 import warnings
+import re
 
 from flask import Flask, jsonify
 from flasgger import Swagger
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import LocalDbConfig, validate_local_db_sql_auth, validate_production_secrets
+from config import LocalDbConfig, validate_local_db_sql_auth, validate_production_secrets, obfuscate_password_in_uri
 from extensions import db, ma, limiter
 from utils.errors import register_error_handlers
 from routes import softland_routes, tracking_routes
@@ -66,6 +67,12 @@ def create_app(config_class=LocalDbConfig):
         'description': 'API automatizada que interactúa con el ERP Softland (Sólo Lectura) y un gestor de estados de despacho local.'
     }
     
+    # Log de diagnóstico: URI de conexión (con contraseña ofuscada)
+    db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if db_uri:
+        obfuscated_uri = obfuscate_password_in_uri(db_uri)
+        app.logger.info(f'Base de datos local (SQLAlchemy): {obfuscated_uri}')
+
     # Inicializar Extensiones
 
     db.init_app(app)
@@ -103,6 +110,17 @@ def create_app(config_class=LocalDbConfig):
 
     # Crear tablas locales si no existen según SQLAlchemy
     with app.app_context():
+        # Log de diagnóstico: cadena de conexión pyodbc (para herramientas legacy)
+        pyodbc_conn_str = LocalDbConfig.get_pyodbc_connection_string()
+        # Ofuscar la contraseña en el log (PWD=valor;)
+        obfuscated_pyodbc = re.sub(
+            r'PWD=[^;]*',
+            'PWD=***',
+            pyodbc_conn_str,
+            flags=re.IGNORECASE
+        )
+        app.logger.info(f'Base de datos local (pyodbc legacy): {obfuscated_pyodbc}')
+
         # Tablas locales según modelos SQLAlchemy (p. ej. DespachosTracking para API + panel).
         db.create_all()
 
