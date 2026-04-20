@@ -692,6 +692,83 @@
             font-weight: 600;
         }
 
+        /* ========== MODAL: ENTREGA EN FAENA (fotos + recepción) ========== */
+        .fotos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .foto-thumb {
+            display: block;
+            aspect-ratio: 1 / 1;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-soft);
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+            cursor: zoom-in;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            background: var(--bg-light);
+        }
+
+        .foto-thumb:hover {
+            transform: scale(1.03);
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+            border-color: var(--primary-blue);
+        }
+
+        .foto-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .recepcion-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-soft);
+            border-radius: 10px;
+            background: var(--card-bg);
+        }
+
+        .recepcion-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .recepcion-table th,
+        .recepcion-table td {
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-soft);
+            white-space: nowrap;
+        }
+
+        .recepcion-table th {
+            background: var(--bg-light);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: var(--text-muted);
+            font-size: 9px;
+        }
+
+        .recepcion-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .recepcion-table tbody tr:hover {
+            background: var(--bg-light);
+        }
+
+        .recepcion-table td.motivo-rechazo {
+            white-space: normal;
+            max-width: 200px;
+            font-style: italic;
+            color: var(--text-muted);
+        }
+
         .scrollable::-webkit-scrollbar {
             width: 8px;
         }
@@ -1183,48 +1260,116 @@
             return map;
         }
 
-        // Vocabulario unificado de estado — usado en chips del producto Y en chips de OC
-        // RECIBIDO (verde) · EN BODEGA (azul) · EN RUTA (naranjo) · PENDIENTE (rojo) · CANCELADO (rojo) · SIN REGISTRAR (gris)
-        function estadoOc(tracking) {
+        // Vocabulario unificado de estado
+        // RECIBIDO EN FAENA · PARCIAL EN FAENA · ENTREGADO · EN RUTA · EN BODEGA · INGRESADO · PENDIENTE · CANCELADO
+        function estadoOc(oc) {
+            const envio = oc && oc.envio;
+            if (envio && envio.fecha_entrega) {
+                const lineas = oc.lineas_envio || [];
+                const conRechazo = lineas.some(l => l.estado_linea === 'RECHAZADO' || l.estado_linea === 'PARCIAL');
+                if (conRechazo || envio.parcial_faena)
+                    return {t: 'PARCIAL EN FAENA', c: 'chip-warn'};
+                return {t: 'RECIBIDO EN FAENA', c: 'chip-ok'};
+            }
+            if (envio && envio.fecha_salida)
+                return {t: 'EN RUTA', c: 'chip-warn'};
+            const tracking = oc && oc.tracking;
             if (!tracking || !tracking[0]) return {t: 'SIN REGISTRAR', c: ''};
             const txt = String(tracking[0]).toUpperCase();
-            if (txt.includes('ENTREGADO')) return {t: 'RECIBIDO',  c: 'chip-ok'};
-            if (txt.includes('BODEGA'))    return {t: 'EN BODEGA', c: 'chip-info'};
-            if (txt.includes('RUTA'))      return {t: 'EN RUTA',   c: 'chip-warn'};
+            if (txt.includes('ENTREGADO')) return {t: 'ENTREGADO',  c: 'chip-info'};
+            if (txt.includes('RUTA'))      return {t: 'EN RUTA',    c: 'chip-warn'};
+            if (txt.includes('BODEGA'))    return {t: 'EN BODEGA',  c: 'chip-info'};
             if (txt.includes('CANCEL') || txt.includes('ANULADO')) return {t: 'CANCELADO', c: 'chip-err'};
+            if (txt.includes('INGRESADO')) return {t: 'INGRESADO',  c: ''};
             return {t: txt.replace(/_/g, ' '), c: ''};
         }
 
-        // Una OC se considera "enviada" si su tracking está En Ruta o Entregado
         function ocEnviada(oc) {
-            if (!oc || !oc.tracking || !oc.tracking[0]) return false;
-            const t = String(oc.tracking[0]).toUpperCase();
-            return t.includes('ENTREGADO') || t.includes('RUTA');
+            if (!oc) return false;
+            if (oc.envio && (oc.envio.fecha_salida || oc.envio.fecha_entrega)) return true;
+            if (oc.tracking && oc.tracking[0]) {
+                const t = String(oc.tracking[0]).toUpperCase();
+                return t.includes('ENTREGADO') || t.includes('RUTA');
+            }
+            return false;
         }
 
-        // Estado agregado a nivel producto (mismo vocabulario que estadoOc)
+        // Estado agregado a nivel producto, considera envío + recepción por línea
         function estadoProducto(prod) {
             const total = (prod.ocs || []).length;
             if (total === 0) return {t: 'SIN OC', c: '', icon: 'bi-dash-circle', flagEnviada: 'na'};
 
-            let entregadas = 0, enBodega = 0, enRuta = 0;
+            let recFaena = 0, recParcial = 0, entregadas = 0, enBodega = 0, enRuta = 0, ingresadas = 0;
+
             prod.ocs.forEach(oc => {
+                const envio = oc.envio;
+                // Líneas de envío que corresponden a ESTE producto en ESTA OC
+                const lineasMias = (oc.lineas_envio || []).filter(l => l.cod_prod === prod.codigo);
+
+                if (envio && envio.fecha_entrega) {
+                    if (lineasMias.length === 0) {
+                        entregadas++;
+                    } else {
+                        const conProblema = lineasMias.some(l => l.estado_linea === 'RECHAZADO' || l.estado_linea === 'PARCIAL');
+                        if (conProblema || envio.parcial_faena) recParcial++;
+                        else recFaena++;
+                    }
+                    return;
+                }
+                if (envio && envio.fecha_salida) { enRuta++; return; }
+
                 const t = oc.tracking && oc.tracking[0] ? String(oc.tracking[0]).toUpperCase() : '';
-                if (t.includes('ENTREGADO')) entregadas++;
-                else if (t.includes('BODEGA')) enBodega++;
-                else if (t.includes('RUTA')) enRuta++;
+                if (t.includes('ENTREGADO'))      entregadas++;
+                else if (t.includes('RUTA'))      enRuta++;
+                else if (t.includes('BODEGA'))    enBodega++;
+                else if (t.includes('INGRESADO')) ingresadas++;
             });
 
-            const enviadas = entregadas + enRuta;
+            const enviadas = recFaena + recParcial + entregadas + enRuta;
             const flagEnviada = enviadas === total ? 'si' : (enviadas > 0 ? 'parcial' : 'no');
 
-            if (entregadas === total && prod.totalFaltan <= 0)
-                return {t: 'RECIBIDO',  c: 'chip-ok',   icon: 'bi-check-circle', flagEnviada};
-            if (entregadas > 0 || enBodega > 0)
-                return {t: 'EN BODEGA', c: 'chip-info', icon: 'bi-box-seam',     flagEnviada};
+            // Prioridad de visibilidad: alarmas primero (parcial > recibido completo > avance > espera)
+            if (recParcial > 0)
+                return {t: 'PARCIAL EN FAENA', c: 'chip-warn', icon: 'bi-exclamation-triangle', flagEnviada};
+            if (recFaena === total && prod.totalFaltan <= 0)
+                return {t: 'RECIBIDO EN FAENA', c: 'chip-ok', icon: 'bi-check2-circle', flagEnviada};
+            if (recFaena > 0)
+                return {t: 'RECIBIDO PARCIAL', c: 'chip-info', icon: 'bi-check-circle', flagEnviada};
+            if (entregadas > 0)
+                return {t: 'ENTREGADO', c: 'chip-info', icon: 'bi-check-circle', flagEnviada};
             if (enRuta > 0)
-                return {t: 'EN RUTA',   c: 'chip-warn', icon: 'bi-truck',        flagEnviada};
-            return    {t: 'PENDIENTE', c: 'chip-err',  icon: 'bi-hourglass-split', flagEnviada};
+                return {t: 'EN RUTA', c: 'chip-warn', icon: 'bi-truck', flagEnviada};
+            if (enBodega > 0)
+                return {t: 'EN BODEGA', c: 'chip-info', icon: 'bi-box-seam', flagEnviada};
+            if (ingresadas > 0)
+                return {t: 'INGRESADO', c: '', icon: 'bi-arrow-down-circle', flagEnviada};
+            return {t: 'PENDIENTE', c: 'chip-err', icon: 'bi-hourglass-split', flagEnviada};
+        }
+
+        // Parsea UrlFotoEvidencia: puede ser URL única o JSON array de URLs
+        function parseFotos(raw) {
+            if (!raw) return [];
+            const s = String(raw).trim();
+            if (!s) return [];
+            if (s.startsWith('[')) {
+                try { const arr = JSON.parse(s); return Array.isArray(arr) ? arr : [s]; }
+                catch (e) { return [s]; }
+            }
+            return [s];
+        }
+
+        // Diferencia en horas/minutos entre dos timestamps ISO
+        function tiempoViaje(salida, entrega) {
+            if (!salida || !entrega) return null;
+            const ds = new Date(salida), de = new Date(entrega);
+            if (isNaN(ds.getTime()) || isNaN(de.getTime())) return null;
+            const ms = de - ds;
+            if (ms < 0) return null;
+            const totalMin = Math.round(ms / 60000);
+            const h = Math.floor(totalMin / 60), m = totalMin % 60;
+            if (h === 0) return `${m} min`;
+            if (m === 0) return `${h} h`;
+            return `${h} h ${m} min`;
         }
 
         // Fecha de última salida registrada entre las OCs enviadas del producto
@@ -1408,7 +1553,7 @@
                         html += `<div class="tree-empty">Sin OCs asignadas a este producto.</div>`;
                     } else {
                         prod.ocs.forEach(oc => {
-                            const eoc = estadoOc(oc.tracking);
+                            const eoc = estadoOc(oc);
                             const stockClass = oc.faltan <= 0 ? 'ok' : (oc.enBodega > 0 ? 'warn' : 'err');
                             html += `
                                 <div class="tree-leaf">
@@ -1520,6 +1665,117 @@
                         </div>
                     </div>
                 `;
+            }
+
+            // ── Entrega en Faena (viaje + recepción por línea) ─────────────
+            const envio = oc.envio;
+            const lineasEnvio = oc.lineas_envio || [];
+            if (envio || lineasEnvio.length) {
+                const fotos = envio ? parseFotos(envio.foto_url) : [];
+                const tViaje = envio ? tiempoViaje(envio.fecha_salida, envio.fecha_entrega) : null;
+                const llegoFaena = envio && envio.fecha_entrega;
+                const titulo = llegoFaena ? 'Entrega en Faena' : 'Envío en Curso';
+
+                let envioHtml = `
+                    <div class="orden-detail-section">
+                        <div class="orden-detail-section-title"><i class="bi bi-truck"></i> ${titulo}</div>
+                `;
+
+                if (envio) {
+                    envioHtml += `
+                        <div class="orden-detail-grid">
+                            <div class="detail-field">
+                                <span class="detail-field-label">Transportista</span>
+                                <span class="detail-field-value">${escapeHtml(envio.transportista || '—')}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Patente</span>
+                                <span class="detail-field-value">${escapeHtml(envio.patente || '—')}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Guía de Despacho</span>
+                                <span class="detail-field-value">${escapeHtml(envio.guia || '—')}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Tiempo de Viaje</span>
+                                <span class="detail-field-value">${tViaje ? escapeHtml(tViaje) : (envio.fecha_salida ? 'En tránsito' : '—')}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Salida Bodega</span>
+                                <span class="detail-field-value">${envio.fecha_salida ? new Date(envio.fecha_salida).toLocaleString('es-ES') : '—'}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Llegada Faena</span>
+                                <span class="detail-field-value ${llegoFaena ? 'status approved' : 'status pending'}">${llegoFaena ? new Date(envio.fecha_entrega).toLocaleString('es-ES') : 'Pendiente'}</span>
+                            </div>
+                        </div>
+                    `;
+
+                    if (envio.observaciones) {
+                        envioHtml += `
+                            <div class="detail-field" style="margin-top:10px;">
+                                <span class="detail-field-label">Observaciones</span>
+                                <span class="detail-field-value" style="font-weight:500;white-space:pre-wrap;">${escapeHtml(envio.observaciones)}</span>
+                            </div>
+                        `;
+                    }
+
+                    if (fotos.length) {
+                        envioHtml += `
+                            <div style="margin-top:14px;">
+                                <div class="detail-field-label" style="margin-bottom:8px;">Evidencia fotográfica</div>
+                                <div class="fotos-grid">
+                                    ${fotos.map(f => `<a href="${escapeHtml(f)}" target="_blank" rel="noopener" class="foto-thumb"><img src="${escapeHtml(f)}" alt="Evidencia" loading="lazy"></a>`).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Tabla de recepción por línea
+                if (lineasEnvio.length) {
+                    envioHtml += `
+                        <div style="margin-top:14px;">
+                            <div class="detail-field-label" style="margin-bottom:8px;">Recepción por línea</div>
+                            <div class="recepcion-table-wrap">
+                                <table class="recepcion-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Producto</th>
+                                            <th>Solicitado</th>
+                                            <th>Enviado</th>
+                                            <th>Recibido</th>
+                                            <th>Estado</th>
+                                            <th>Recibió</th>
+                                            <th>Motivo rechazo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${lineasEnvio.map(l => {
+                                            const estCls = l.estado_linea === 'ENTREGADO' ? 'chip-ok' :
+                                                           l.estado_linea === 'RECHAZADO' ? 'chip-err' :
+                                                           l.estado_linea === 'PARCIAL' ? 'chip-warn' : '';
+                                            return `
+                                                <tr>
+                                                    <td><strong>${escapeHtml(l.cod_prod || '—')}</strong></td>
+                                                    <td>${fmtNum(l.solicitada)}</td>
+                                                    <td>${fmtNum(l.enviada)}</td>
+                                                    <td>${l.recibida === null ? '—' : fmtNum(l.recibida)}</td>
+                                                    <td><span class="tree-chip ${estCls}">${escapeHtml(l.estado_linea || '—')}</span></td>
+                                                    <td>${escapeHtml(l.recibido_por || '—')}</td>
+                                                    <td class="motivo-rechazo">${escapeHtml(l.motivo_rechazo || '—')}</td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                envioHtml += `</div>`;
+                contentHTML += envioHtml;
             }
 
             contentHTML += `

@@ -1848,12 +1848,66 @@ def supervisor_contratos():
                 None
             ]
 
+        # Envío concreto (viaje bodega → faena) - queda el más reciente por OC
+        cursor_l.execute("""
+            SELECT e.NumOc, e.Estado, e.FechaHoraSalida, e.FechaHoraEntrega,
+                   e.Transportista, e.PatenteVehiculo, e.GuiaDespacho, e.Observaciones,
+                   e.UrlFotoEvidencia, e.EntregaParcialBodega, e.RecepcionParcialFaena
+            FROM DespachosEnvio e
+            INNER JOIN (
+                SELECT NumOc, MAX(Id) AS MaxId FROM DespachosEnvio GROUP BY NumOc
+            ) last ON e.Id = last.MaxId
+        """)
+
+        def _iso(v):
+            if v is None:
+                return None
+            if isinstance(v, str):
+                return v
+            return v.isoformat()
+
+        envio_map = {}
+        for er in cursor_l.fetchall():
+            envio_map[er[0]] = {
+                'estado': er[1],
+                'fecha_salida': _iso(er[2]),
+                'fecha_entrega': _iso(er[3]),
+                'transportista': er[4],
+                'patente': er[5],
+                'guia': er[6],
+                'observaciones': er[7],
+                'foto_url': er[8],
+                'parcial_bodega': bool(er[9]) if er[9] is not None else False,
+                'parcial_faena': bool(er[10]) if er[10] is not None else False,
+            }
+
+        # Recepción por línea en faena (con nombre de quien recibió)
+        cursor_l.execute("""
+            SELECT d.NumOc, d.CodProd, d.CantidadSolicitada, d.CantidadEnviada,
+                   d.CantidadRecibida, d.EstadoLinea, d.FechaRecepcion,
+                   u.NombreCompleto, d.MotivoRechazo
+            FROM DespachosEnvioDetalle d
+            LEFT JOIN UsuariosSistema u ON d.RecibidoPor = u.Id
+        """)
+        recepcion_map = {}
+        for rr in cursor_l.fetchall():
+            recepcion_map.setdefault(rr[0], []).append({
+                'cod_prod': rr[1],
+                'solicitada': float(rr[2]) if rr[2] is not None else 0,
+                'enviada': float(rr[3]) if rr[3] is not None else 0,
+                'recibida': float(rr[4]) if rr[4] is not None else None,
+                'estado_linea': rr[5],
+                'fecha_recep': _iso(rr[6]),
+                'recibido_por': rr[7],
+                'motivo_rechazo': rr[8],
+            })
+
         for req_data in requisiciones_dict.values():
             for oc_data in req_data['ordenes'].values():
-                if oc_data['num_oc'] in tracking_map:
-                    oc_data['tracking'] = tracking_map[oc_data['num_oc']]
-                else:
-                    oc_data['tracking'] = None
+                noc = oc_data['num_oc']
+                oc_data['tracking'] = tracking_map.get(noc)
+                oc_data['envio'] = envio_map.get(noc)
+                oc_data['lineas_envio'] = recepcion_map.get(noc, [])
 
         requisiciones_data = list(requisiciones_dict.values())
         for req in requisiciones_data:
