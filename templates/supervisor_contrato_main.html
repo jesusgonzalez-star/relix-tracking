@@ -328,11 +328,7 @@
             flex: 1;
             overflow-y: auto;
             padding: 16px;
-            background-color: var(--bg-light);
-            background-image:
-                radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.12), transparent 28%),
-                radial-gradient(circle at 100% 0%, rgba(243, 146, 0, 0.1), transparent 24%),
-                linear-gradient(180deg, #f8fbff 0%, #f8fafc 55%, #f1f5f9 100%);
+            background: transparent;
         }
 
         .detail-empty {
@@ -1074,7 +1070,7 @@
     <div class="orden-detail-modal" id="ordenModal">
         <div class="orden-detail-content">
             <div class="orden-detail-header">
-                <h4 style="margin: 0; font-size: 16px; color: #202124;">Orden de Compra #<span id="modalOcNumber">-</span></h4>
+                <h4 style="margin: 0;">Orden de Compra #<span id="modalOcNumber">-</span></h4>
                 <button class="orden-detail-close" onclick="closeOdenModal()">&times;</button>
             </div>
             <div class="orden-detail-body" id="modalContent">
@@ -1111,7 +1107,7 @@
 
                 const faltanCount = productosFaltantesCount(req);
                 const faltanBadge = faltanCount > 0
-                    ? `<span class="req-item-faltan" title="Productos con faltantes">${faltanCount} faltan</span>`
+                    ? `<span class="req-item-faltan" title="Productos con faltantes">${faltanCount} prod.</span>`
                     : '';
 
                 item.innerHTML = `
@@ -1187,20 +1183,16 @@
             return map;
         }
 
-        function estadoProducto(p) {
-            if (p.totalFaltan <= 0) return {t: 'COMPLETO', c: 'chip-ok'};
-            if (p.totalBodega > 0)   return {t: 'PARCIAL',  c: 'chip-warn'};
-            return {t: 'PENDIENTE', c: 'chip-err'};
-        }
-
+        // Vocabulario unificado de estado — usado en chips del producto Y en chips de OC
+        // RECIBIDO (verde) · EN BODEGA (azul) · EN RUTA (naranjo) · PENDIENTE (rojo) · CANCELADO (rojo) · SIN REGISTRAR (gris)
         function estadoOc(tracking) {
             if (!tracking || !tracking[0]) return {t: 'SIN REGISTRAR', c: ''};
-            const txt = String(tracking[0]).replace(/_/g, ' ').toUpperCase();
-            if (txt.includes('ENTREGADO')) return {t: txt, c: 'chip-ok'};
-            if (txt.includes('BODEGA'))    return {t: txt, c: 'chip-info'};
-            if (txt.includes('RUTA'))      return {t: txt, c: 'chip-warn'};
-            if (txt.includes('CANCEL') || txt.includes('ANULADO')) return {t: txt, c: 'chip-err'};
-            return {t: txt, c: ''};
+            const txt = String(tracking[0]).toUpperCase();
+            if (txt.includes('ENTREGADO')) return {t: 'RECIBIDO',  c: 'chip-ok'};
+            if (txt.includes('BODEGA'))    return {t: 'EN BODEGA', c: 'chip-info'};
+            if (txt.includes('RUTA'))      return {t: 'EN RUTA',   c: 'chip-warn'};
+            if (txt.includes('CANCEL') || txt.includes('ANULADO')) return {t: 'CANCELADO', c: 'chip-err'};
+            return {t: txt.replace(/_/g, ' '), c: ''};
         }
 
         // Una OC se considera "enviada" si su tracking está En Ruta o Entregado
@@ -1210,14 +1202,29 @@
             return t.includes('ENTREGADO') || t.includes('RUTA');
         }
 
-        // Estado de envío agregado a nivel producto
-        function envioProducto(prod) {
-            const total = prod.ocs.length;
-            if (total === 0) return {t: 'SIN OC', c: '', flag: 'na', count: 0, total: 0};
-            const count = prod.ocs.filter(ocEnviada).length;
-            if (count === total) return {t: `ENVIADA ${count}/${total}`, c: 'chip-ok', flag: 'si', count, total};
-            if (count > 0)       return {t: `PARCIAL ${count}/${total}`, c: 'chip-warn', flag: 'parcial', count, total};
-            return {t: `NO ENVIADA 0/${total}`, c: 'chip-err', flag: 'no', count, total};
+        // Estado agregado a nivel producto (mismo vocabulario que estadoOc)
+        function estadoProducto(prod) {
+            const total = (prod.ocs || []).length;
+            if (total === 0) return {t: 'SIN OC', c: '', icon: 'bi-dash-circle', flagEnviada: 'na'};
+
+            let entregadas = 0, enBodega = 0, enRuta = 0;
+            prod.ocs.forEach(oc => {
+                const t = oc.tracking && oc.tracking[0] ? String(oc.tracking[0]).toUpperCase() : '';
+                if (t.includes('ENTREGADO')) entregadas++;
+                else if (t.includes('BODEGA')) enBodega++;
+                else if (t.includes('RUTA')) enRuta++;
+            });
+
+            const enviadas = entregadas + enRuta;
+            const flagEnviada = enviadas === total ? 'si' : (enviadas > 0 ? 'parcial' : 'no');
+
+            if (entregadas === total && prod.totalFaltan <= 0)
+                return {t: 'RECIBIDO',  c: 'chip-ok',   icon: 'bi-check-circle', flagEnviada};
+            if (entregadas > 0 || enBodega > 0)
+                return {t: 'EN BODEGA', c: 'chip-info', icon: 'bi-box-seam',     flagEnviada};
+            if (enRuta > 0)
+                return {t: 'EN RUTA',   c: 'chip-warn', icon: 'bi-truck',        flagEnviada};
+            return    {t: 'PENDIENTE', c: 'chip-err',  icon: 'bi-hourglass-split', flagEnviada};
         }
 
         // Fecha de última salida registrada entre las OCs enviadas del producto
@@ -1372,26 +1379,25 @@
                 html += `<div class="tree-empty"><i class="bi bi-inbox"></i> No hay productos asociados.</div>`;
             } else {
                 productos.forEach(prod => {
-                    const e = estadoProducto(prod);
-                    const env = envioProducto(prod);
+                    const est = estadoProducto(prod);
                     const ultSalida = fechaUltimaSalida(prod);
                     const ultSalidaChip = ultSalida
-                        ? `<span class="tree-chip chip-info" title="Última salida registrada"><i class="bi bi-calendar-check"></i> Salida ${fmtDate(ultSalida)}</span>`
+                        ? `<span class="tree-chip" title="Última salida registrada"><i class="bi bi-calendar-check"></i> ${fmtDate(ultSalida)}</span>`
                         : '';
+                    const faltanChip = prod.totalFaltan > 0
+                        ? `<span class="tree-chip chip-err" title="Unidades pendientes de recibir">Faltan ${fmtNum(prod.totalFaltan)} / ${fmtNum(prod.totalCant)}</span>`
+                        : `<span class="tree-chip chip-ok" title="Completo">${fmtNum(prod.totalCant)} un. completas</span>`;
                     html += `
                         <div class="tree-node tree-level-2" data-node-product
-                             data-faltan="${prod.totalFaltan}" data-enviada="${env.flag}">
+                             data-faltan="${prod.totalFaltan}" data-enviada="${est.flagEnviada}">
                             <div class="tree-node-header" data-toggle-node>
                                 <i class="bi bi-chevron-right tree-chevron"></i>
                                 <span class="tree-node-title">
                                     <span class="tree-code">${escapeHtml(prod.codigo)}</span>${escapeHtml(prod.descripcion)}
                                 </span>
                                 <span class="tree-node-meta">
-                                    <span class="tree-chip">Pedido ${fmtNum(prod.totalCant)}</span>
-                                    <span class="tree-chip chip-ok">Bodega ${fmtNum(prod.totalBodega)}</span>
-                                    <span class="tree-chip ${prod.totalFaltan > 0 ? 'chip-err' : 'chip-ok'}">Faltan ${fmtNum(prod.totalFaltan)}</span>
-                                    <span class="tree-chip ${e.c}" title="Estado de stock en bodega"><i class="bi bi-box-seam"></i> ${e.t}</span>
-                                    <span class="tree-chip ${env.c}" title="OCs enviadas (En Ruta o Entregado)"><i class="bi bi-truck"></i> ${env.t}</span>
+                                    ${faltanChip}
+                                    <span class="tree-chip ${est.c}" title="Estado agregado de las OCs"><i class="bi ${est.icon}"></i> ${est.t}</span>
                                     ${ultSalidaChip}
                                 </span>
                             </div>
@@ -1476,19 +1482,19 @@
                     <div class="orden-detail-grid">
                         <div class="detail-field">
                             <span class="detail-field-label">Proveedor</span>
-                            <span class="detail-field-value">${oc.proveedor}</span>
+                            <span class="detail-field-value">${escapeHtml(oc.proveedor)}</span>
                         </div>
                         <div class="detail-field">
                             <span class="detail-field-label">Fecha OC</span>
-                            <span class="detail-field-value">${new Date(oc.fecha).toLocaleDateString('es-ES')}</span>
+                            <span class="detail-field-value">${fmtDate(oc.fecha)}</span>
                         </div>
                         <div class="detail-field">
                             <span class="detail-field-label">Centro de Costo</span>
-                            <span class="detail-field-value">${oc.centro_costo}</span>
+                            <span class="detail-field-value">${escapeHtml(oc.centro_costo)}</span>
                         </div>
                         <div class="detail-field">
                             <span class="detail-field-label">Monto Total</span>
-                            <span class="detail-field-value">$${(oc.monto || 0).toLocaleString('es-ES')}</span>
+                            <span class="detail-field-value">$${fmtNum(oc.monto)}</span>
                         </div>
                     </div>
                 </div>
@@ -1501,11 +1507,15 @@
                         <div class="orden-detail-grid">
                             <div class="detail-field">
                                 <span class="detail-field-label">Estado</span>
-                                <span class="detail-field-value">${oc.tracking[0].replace(/_/g, ' ')}</span>
+                                <span class="detail-field-value">${escapeHtml(String(oc.tracking[0] || '').replace(/_/g, ' '))}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Fecha salida</span>
+                                <span class="detail-field-value">${oc.tracking[1] ? new Date(oc.tracking[1]).toLocaleDateString('es-ES') : '—'}</span>
                             </div>
                             <div class="detail-field">
                                 <span class="detail-field-label">Registrado por</span>
-                                <span class="detail-field-value">${oc.tracking[3] || 'N/A'}</span>
+                                <span class="detail-field-value">${escapeHtml(oc.tracking[2] || '—')}</span>
                             </div>
                         </div>
                     </div>
@@ -1519,26 +1529,23 @@
             `;
 
             oc.lineas.forEach(linea => {
-                const cant = linea[2] || 0;
-                const enBodega = linea[3] || 0;
-                const faltan = linea[4] || 0;
-                const ocLink = linea[5] || oc.num_oc;
-                const fmt = (n) => n.toLocaleString('es-ES', {minimumFractionDigits: 2});
+                const cant = Number(linea[2]) || 0;
+                const enBodega = Number(linea[3]) || 0;
+                const faltan = Number(linea[4]) || 0;
                 const estadoStock = faltan <= 0
-                    ? '<span style="color:#065f46;font-weight:800;">COMPLETO</span>'
+                    ? '<span style="color:#065f46;font-weight:800;">RECIBIDO</span>'
                     : (enBodega > 0
-                        ? '<span style="color:#92400e;font-weight:800;">PARCIAL</span>'
+                        ? '<span style="color:#92400e;font-weight:800;">EN BODEGA</span>'
                         : '<span style="color:#991b1b;font-weight:800;">PENDIENTE</span>');
                 contentHTML += `
                     <div class="producto-item">
-                        <div class="producto-codigo">${linea[0] || 'N/A'}</div>
-                        <div class="producto-desc">${linea[1] || 'Sin descripción'}</div>
+                        <div class="producto-codigo">${escapeHtml(linea[0] || 'N/A')}</div>
+                        <div class="producto-desc">${escapeHtml(linea[1] || 'Sin descripción')}</div>
                         <div class="producto-qty" style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px;margin-top:6px;">
-                            <div>OC enlazada: <strong>#${ocLink}</strong></div>
                             <div>Estado: ${estadoStock}</div>
-                            <div>Cantidad OC: <strong>${fmt(cant)}</strong></div>
-                            <div>En bodega: <strong style="color:#065f46;">${fmt(enBodega)}</strong></div>
-                            <div style="grid-column:1 / -1;">Faltan: <strong style="color:${faltan > 0 ? '#991b1b' : '#065f46'};">${fmt(faltan)}</strong></div>
+                            <div>Pedido: <strong>${fmtNum(cant)}</strong></div>
+                            <div>En bodega: <strong style="color:#065f46;">${fmtNum(enBodega)}</strong></div>
+                            <div>Faltan: <strong style="color:${faltan > 0 ? '#991b1b' : '#065f46'};">${fmtNum(faltan)}</strong></div>
                         </div>
                     </div>
                 `;
