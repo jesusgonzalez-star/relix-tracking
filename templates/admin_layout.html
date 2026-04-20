@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/img/favicon-16x16.png">
+    <link rel="manifest" href="/static/img/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Administración{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="fade-in-up admin-app-body">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top admin-top-nav">
+        <div class="container">
+            <a class="navbar-brand navbar-brand-logo-only py-0" href="{% if admin_nav_mode|default('viz') == 'usuarios' %}{{ url_for('frontend.gestionar_usuarios') }}{% else %}{{ url_for('frontend.index') }}{% endif %}" title="Inicio">
+                <img src="/static/img/relix-logo.png" alt="" class="brand-logo-img">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNav" aria-controls="adminNav" aria-expanded="false" aria-label="Menú">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="adminNav">
+                {% if admin_nav_mode|default('viz') == 'viz' %}
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 mt-2 mt-lg-0 admin-nav-links">
+                    <li class="nav-item">
+                        <a class="nav-link admin-nav-link {% if request.endpoint == 'frontend.tracking_completo' %}active{% endif %}" href="{{ url_for('frontend.tracking_completo') }}">
+                            <i class="bi bi-diagram-3 me-1"></i>Tracking
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link admin-nav-link {% if request.endpoint == 'frontend.reportes' %}active{% endif %}" href="{{ url_for('frontend.reportes') }}">
+                            <i class="bi bi-graph-up-arrow me-1"></i>Reportes
+                        </a>
+                    </li>
+                </ul>
+                {% endif %}
+                <div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2 ms-lg-auto pb-3 pb-lg-0">
+                    <span class="text-white-50 small px-1">
+                        <i class="bi bi-person-badge me-1"></i>{{ session.get('nombre') or session.get('username') or 'Usuario' }}
+                        <span class="badge bg-light text-dark ms-1">{{ session.get('rol') or '' }}</span>
+                    </span>
+                    <a class="btn btn-outline-light btn-sm" href="{{ url_for('frontend.logout') }}">
+                        <i class="bi bi-box-arrow-right me-1"></i>Salir
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <header class="admin-page-hero">
+        <div class="container py-3 py-md-4">
+            <div class="admin-hero-inner">
+                <h1 class="admin-hero-title mb-1">{% block admin_page_heading %}Administración{% endblock %}</h1>
+                <p class="admin-hero-subtitle mb-0">{% block admin_page_subtitle %}{% endblock %}</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="container main-container pb-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                        <i class="bi bi-info-circle-fill me-2"></i>{{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block admin_content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block admin_scripts %}{% endblock %}
+</body>
+</html>

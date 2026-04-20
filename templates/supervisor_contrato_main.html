@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supervisor de Contratos - Requisiciones</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #0070a8;
+            --primary-blue-dark: #004d75;
+            --primary-blue-light: #e0f2fe;
+            --primary-orange: #f39200;
+            --primary-orange-dark: #d58000;
+            --primary-orange-light: #ffedd5;
+            --bg-light: #f8fafc;
+            --text-dark: #334155;
+            --text-muted: #64748b;
+            --card-bg: #ffffff;
+            --border-soft: #e2e8f0;
+            --shadow-soft: 0 10px 26px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            background-image:
+                radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.12), transparent 28%),
+                radial-gradient(circle at 100% 0%, rgba(243, 146, 0, 0.1), transparent 24%),
+                linear-gradient(180deg, #f8fbff 0%, #f8fafc 55%, #f1f5f9 100%);
+            font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            color: var(--text-dark);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 260px;
+            background: var(--card-bg);
+            border-right: 1px solid var(--border-soft);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 14px 16px;
+            background: linear-gradient(90deg, var(--primary-blue-dark) 0%, var(--primary-blue) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sidebar-logo {
+            font-size: 14px;
+            font-weight: 800;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex: 0;
+        }
+
+        .sidebar-logo img {
+            height: 32px;
+            width: auto;
+            filter: brightness(0) invert(1);
+        }
+
+        .sidebar-subtitle {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.85);
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .sidebar-search {
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .sidebar-search input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1.5px solid var(--border-soft);
+            border-radius: 8px;
+            font-size: 12px;
+            background: var(--bg-light);
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .sidebar-search input:focus {
+            outline: none;
+            background: var(--card-bg);
+            border-color: var(--primary-orange);
+            box-shadow: 0 0 0 3px var(--primary-orange-light);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+
+        .req-item {
+            padding: 10px 12px;
+            margin: 3px 8px;
+            border-left: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .req-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, var(--primary-blue-dark) 0%, var(--primary-blue) 100%);
+            transform: scaleY(0);
+            transform-origin: center;
+            transition: transform 0.25s ease;
+        }
+
+        .req-item:hover {
+            background: var(--bg-light);
+        }
+
+        .req-item.active {
+            background: var(--primary-blue-light);
+            box-shadow: inset 0 0 0 1px rgba(0, 112, 168, 0.2);
+            font-weight: 600;
+        }
+
+        .req-item.active::before {
+            transform: scaleY(1);
+        }
+
+        .req-item-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-bottom: 2px;
+        }
+
+        .req-item-number {
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--text-dark);
+        }
+
+        .req-item-faltan {
+            display: inline-block;
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 5px;
+            background: #fee2e2;
+            color: #991b1b;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .req-item-date {
+            display: block;
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 3px;
+        }
+
+        .req-item-status {
+            display: inline-block;
+            font-size: 9px;
+            padding: 3px 8px;
+            border-radius: 5px;
+            background: var(--bg-light);
+            color: var(--text-dark);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .req-item-status.approved {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .req-item-status.pending {
+            background: var(--primary-orange-light);
+            color: var(--primary-orange-dark);
+        }
+
+        .req-item-status.rejected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .sidebar-footer {
+            padding: 12px;
+            border-top: 1px solid var(--border-soft);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-light);
+        }
+
+        .sidebar-footer-user {
+            flex: 1;
+        }
+
+        .sidebar-footer-name {
+            font-weight: 700;
+            color: var(--text-dark);
+            display: block;
+            font-size: 11px;
+        }
+
+        .sidebar-footer-role {
+            color: var(--text-muted);
+            font-size: 9px;
+            margin-top: 1px;
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 6px;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            border-radius: 6px;
+        }
+
+        .logout-btn:hover {
+            background: var(--primary-orange-light);
+            color: var(--primary-orange-dark);
+        }
+
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+            flex: 1;
+            margin-left: 260px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .topbar {
+            padding: 14px 24px;
+            background: linear-gradient(90deg, var(--primary-blue-dark) 0%, var(--primary-blue) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 20px rgba(2, 54, 97, 0.25);
+        }
+
+        .topbar-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .topbar-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-icon {
+            background: linear-gradient(135deg, var(--primary-orange) 0%, var(--primary-orange-dark) 100%);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #fff;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 12px rgba(243, 146, 0, 0.2);
+        }
+
+        .btn-icon:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(243, 146, 0, 0.35);
+        }
+
+        .btn-icon:active {
+            transform: translateY(0);
+        }
+
+        .detail-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background-color: var(--bg-light);
+            background-image:
+                radial-gradient(circle at 0% 0%, rgba(14, 165, 233, 0.12), transparent 28%),
+                radial-gradient(circle at 100% 0%, rgba(243, 146, 0, 0.1), transparent 24%),
+                linear-gradient(180deg, #f8fbff 0%, #f8fafc 55%, #f1f5f9 100%);
+        }
+
+        .detail-empty {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        .detail-empty-icon {
+            font-size: 52px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .detail-empty-text {
+            font-size: 15px;
+            margin-bottom: 8px;
+            color: #4b5563;
+            font-weight: 600;
+        }
+
+        .detail-empty-subtext {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        /* ========== DETAIL SECTION ========== */
+        .detail-header {
+            background: var(--card-bg);
+            padding: 18px;
+            border-radius: 18px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .detail-header-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--primary-blue);
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .detail-field {
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            background: var(--bg-light);
+            border-radius: 10px;
+            border: 1px solid var(--border-soft);
+        }
+
+        .detail-field-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 800;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-field-value {
+            font-size: 13px;
+            color: var(--text-dark);
+            font-weight: 700;
+        }
+
+        .detail-field-value.status {
+            padding: 6px 12px;
+            border-radius: 6px;
+            background: var(--bg-light);
+            display: inline-block;
+            width: fit-content;
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        .detail-field-value.status.approved {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .detail-field-value.status.pending {
+            background: var(--primary-orange-light);
+            color: var(--primary-orange-dark);
+        }
+
+        .detail-field-value.status.rejected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* ========== ORDENES SECTION ========== */
+        .ordenes-section {
+            background: var(--card-bg);
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            overflow: hidden;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .ordenes-header {
+            padding: 14px 18px;
+            border-bottom: 2px solid var(--border-soft);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: transparent;
+        }
+
+        .ordenes-header-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text-dark);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .ordenes-header-count {
+            background: linear-gradient(135deg, var(--primary-orange) 0%, var(--primary-orange-dark) 100%);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 12px rgba(243, 146, 0, 0.2);
+        }
+
+        .orden-item {
+            padding: 13px 18px;
+            border-bottom: 1px solid var(--border-soft);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            position: relative;
+        }
+
+        .orden-item::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -1px;
+            height: 1px;
+            background: linear-gradient(90deg, var(--primary-blue-dark) 0%, var(--primary-blue) 100%);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.25s ease;
+        }
+
+        .orden-item:last-child {
+            border-bottom: none;
+        }
+
+        .orden-item:hover {
+            background: var(--bg-light);
+        }
+
+        .orden-item:hover::after {
+            transform: scaleX(1);
+        }
+
+        .orden-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .orden-item-number {
+            font-weight: 800;
+            color: var(--primary-blue);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .orden-item-badge {
+            background: var(--bg-light);
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            color: var(--text-dark);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+
+        .orden-item-badge.in-bodega {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .orden-item-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .orden-item-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .orden-item-detail-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            font-weight: 800;
+            letter-spacing: 0.3px;
+        }
+
+        .orden-item-detail-value {
+            color: var(--text-dark);
+            font-weight: 700;
+        }
+
+        /* ========== MODAL ========== */
+        .orden-detail-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 260px;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+            backdrop-filter: blur(4px);
+        }
+
+        .orden-detail-modal.show {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 40px;
+        }
+
+        .orden-detail-content {
+            background: var(--card-bg);
+            border-radius: 18px;
+            width: 100%;
+            max-width: 750px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 18px 38px rgba(2, 54, 97, 0.16);
+        }
+
+        .orden-detail-header {
+            padding: 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(90deg, var(--primary-blue-dark) 0%, var(--primary-blue) 100%);
+        }
+
+        .orden-detail-header h4 {
+            color: #fff !important;
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
+        }
+
+        .orden-detail-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #fff;
+            transition: all 0.2s ease;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .orden-detail-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
+        }
+
+        .orden-detail-body {
+            padding: 18px;
+        }
+
+        .orden-detail-section {
+            margin-bottom: 18px;
+        }
+
+        .orden-detail-section-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--primary-blue);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--border-soft);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .orden-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .producto-item {
+            padding: 12px;
+            background: var(--bg-light);
+            border-radius: 10px;
+            border: 1px solid var(--border-soft);
+            border-left: 4px solid var(--primary-blue);
+            transition: all 0.2s ease;
+        }
+
+        .producto-item:hover {
+            background: var(--primary-blue-light);
+            box-shadow: 0 4px 12px rgba(0, 112, 168, 0.1);
+        }
+
+        .producto-codigo {
+            font-weight: 800;
+            color: var(--text-dark);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+
+        .producto-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .producto-qty {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            font-weight: 600;
+        }
+
+        .scrollable::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollable::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scrollable::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .scrollable::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* ========== TREE ACCORDION (vista jerárquica supervisor) ========== */
+        .tree-toolbar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        .tree-toolbar-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border-soft);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tree-toolbar-btn:hover {
+            background: var(--primary-blue-light);
+            border-color: var(--primary-blue);
+            color: var(--primary-blue-dark);
+        }
+
+        select.tree-toolbar-btn {
+            padding-right: 26px;
+            appearance: auto;
+            cursor: pointer;
+        }
+
+        .tree-toolbar-filter {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tree-toolbar-filter input {
+            accent-color: var(--primary-orange);
+        }
+
+        .tree-root {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 10px 14px 14px;
+        }
+
+        .tree-node {
+            background: var(--card-bg);
+            border: 1px solid var(--border-soft);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+        }
+
+        .tree-node-header {
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            user-select: none;
+            flex-wrap: wrap;
+        }
+
+        .tree-node-header:hover {
+            background: var(--bg-light);
+        }
+
+        .tree-chevron {
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: transform 0.2s ease;
+            display: inline-block;
+            width: 14px;
+            text-align: center;
+            flex: 0 0 14px;
+        }
+
+        .tree-node.expanded > .tree-node-header .tree-chevron {
+            transform: rotate(90deg);
+            color: var(--primary-blue);
+        }
+
+        .tree-node-title {
+            font-weight: 700;
+            color: var(--text-dark);
+            font-size: 13px;
+            flex: 0 1 auto;
+            max-width: 42%;
+            min-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tree-node-header .tree-node-meta {
+            margin-left: 12px;
+            margin-right: auto;
+        }
+
+        .tree-node-title .tree-code {
+            color: var(--primary-blue);
+            font-weight: 800;
+            margin-right: 6px;
+        }
+
+        .tree-node-meta {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .tree-chip {
+            background: var(--bg-light);
+            color: var(--text-dark);
+            padding: 3px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            border: 1px solid var(--border-soft);
+        }
+
+        .tree-chip.chip-ok { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+        .tree-chip.chip-warn { background: var(--primary-orange-light); color: var(--primary-orange-dark); border-color: #fed7aa; }
+        .tree-chip.chip-err { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+        .tree-chip.chip-info { background: var(--primary-blue-light); color: var(--primary-blue-dark); border-color: #bae6fd; }
+
+        .tree-node-body {
+            display: none;
+            border-top: 1px dashed var(--border-soft);
+            padding: 8px 12px 12px 28px;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.6), rgba(255, 255, 255, 0));
+        }
+
+        .tree-node.expanded > .tree-node-body {
+            display: block;
+        }
+
+        /* nivel 2: productos */
+        .tree-level-2 {
+            background: var(--bg-light);
+            border-color: var(--border-soft);
+            border-radius: 10px;
+        }
+
+        .tree-level-2 + .tree-level-2 {
+            margin-top: 0;
+        }
+
+        .tree-level-2 > .tree-node-header {
+            padding: 10px 12px;
+        }
+
+        .tree-level-2 > .tree-node-header .tree-node-title {
+            font-size: 12px;
+        }
+
+        .tree-level-2 > .tree-node-body {
+            padding: 6px 10px 10px 26px;
+            background: var(--card-bg);
+        }
+
+        /* nivel 3: OCs */
+        .tree-leaf {
+            padding: 10px 12px;
+            margin-top: 6px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-soft);
+            border-left: 3px solid var(--primary-orange);
+            border-radius: 8px;
+            transition: background 0.2s ease;
+        }
+
+        .tree-leaf:hover {
+            background: var(--bg-light);
+        }
+
+        .tree-leaf-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tree-leaf-title {
+            font-weight: 800;
+            color: var(--primary-blue);
+            font-size: 12px;
+        }
+
+        .tree-leaf-details {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 8px;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .tree-leaf-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .tree-leaf-detail-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            color: var(--text-muted);
+        }
+
+        .tree-leaf-detail-value {
+            color: var(--text-dark);
+            font-weight: 700;
+            font-size: 11px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tree-leaf-detail-value.ok { color: #065f46; }
+        .tree-leaf-detail-value.warn { color: #92400e; }
+        .tree-leaf-detail-value.err { color: #991b1b; }
+
+        .tree-leaf-more {
+            margin-left: auto;
+            background: transparent;
+            border: 1px solid var(--border-soft);
+            color: var(--primary-blue);
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+        }
+
+        .tree-leaf-more:hover {
+            background: var(--primary-blue-light);
+            border-color: var(--primary-blue);
+        }
+
+        .tree-empty {
+            padding: 16px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            background: var(--bg-light);
+            border-radius: 8px;
+            margin-top: 6px;
+        }
+
+        @media (max-width: 1400px) {
+            .detail-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .orden-item-details {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .tree-leaf-details {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 900px) {
+            .tree-leaf-details {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .tree-node-meta {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <img src="/static/img/relix-logo.png" alt="Relix" title="Relix Water">
+            </div>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="searchInput" placeholder="Buscar req, código o producto...">
+        </div>
+
+        <div class="sidebar-content scrollable" id="requisionesList">
+            <!-- Requisiciones se cargan aquí -->
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-footer-user">
+                <span class="sidebar-footer-name">{{ session.nombre or 'Usuario' }}</span>
+                <span class="sidebar-footer-role">{{ session.rol or '' }}</span>
+            </div>
+            <a href="/logout" class="logout-btn" title="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <div class="topbar">
+            <div class="topbar-title">
+                <i class="bi bi-file-earmark-check me-2"></i>Supervisión de Requisiciones
+            </div>
+            <div class="topbar-actions">
+                <a href="/" class="btn-icon">
+                    <i class="bi bi-arrow-left me-1"></i>Atrás
+                </a>
+            </div>
+        </div>
+
+        <div class="detail-panel">
+            <div id="detailContent">
+                <div class="detail-empty">
+                    <div>
+                        <div class="detail-empty-icon">
+                            <i class="bi bi-inbox"></i>
+                        </div>
+                        <div class="detail-empty-text">Selecciona una requisición</div>
+                        <div class="detail-empty-subtext">Elige una requisición de la lista para ver sus detalles</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de detalle de orden -->
+    <div class="orden-detail-modal" id="ordenModal">
+        <div class="orden-detail-content">
+            <div class="orden-detail-header">
+                <h4 style="margin: 0; font-size: 16px; color: #202124;">Orden de Compra #<span id="modalOcNumber">-</span></h4>
+                <button class="orden-detail-close" onclick="closeOdenModal()">&times;</button>
+            </div>
+            <div class="orden-detail-body" id="modalContent">
+                <!-- Contenido se carga aquí -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Datos de requisiciones
+        const requisiciones = JSON.parse({{ requisiciones_json | tojson }});
+        let currentSelectedReq = null;
+
+        // Renderizar lista de requisiciones
+        function renderRequisiciones(filter = '') {
+            const container = document.getElementById('requisionesList');
+            container.innerHTML = '';
+
+            const filtered = requisiciones.filter(req => reqMatchesFilter(req, filter));
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div style="padding: 16px; text-align: center; color: #5f6368; font-size: 12px;">No hay requisiciones</div>';
+                return;
+            }
+
+            filtered.forEach(req => {
+                const item = document.createElement('div');
+                item.className = 'req-item' + (currentSelectedReq === req.num_req ? ' active' : '');
+                item.onclick = () => selectRequisicion(req.num_req);
+
+                const statusClass = req.estado.toUpperCase().includes('APROBADO') ? 'approved' :
+                                   req.estado.toUpperCase().includes('RECHAZADO') ? 'rejected' : 'pending';
+
+                const faltanCount = productosFaltantesCount(req);
+                const faltanBadge = faltanCount > 0
+                    ? `<span class="req-item-faltan" title="Productos con faltantes">${faltanCount} faltan</span>`
+                    : '';
+
+                item.innerHTML = `
+                    <div class="req-item-top">
+                        <span class="req-item-number">#${req.num_req}</span>
+                        ${faltanBadge}
+                    </div>
+                    <span class="req-item-date">${new Date(req.fecha).toLocaleDateString('es-ES')}</span>
+                    <span class="req-item-status ${statusClass}">${req.estado}</span>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // Seleccionar requisición
+        function selectRequisicion(numReq) {
+            currentSelectedReq = numReq;
+            renderRequisiciones(document.getElementById('searchInput').value);
+
+            const req = requisiciones.find(r => r.num_req === numReq);
+            if (req) {
+                renderDetail(req);
+            }
+        }
+
+        // Utilidades de formato y seguridad
+        const fmtNum = (n) => (Number(n) || 0).toLocaleString('es-ES', {minimumFractionDigits: 2});
+        const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-ES') : '-';
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function buildProductosMap(req) {
+            const map = {};
+            (req.ordenes || []).forEach(oc => {
+                (oc.lineas || []).forEach(linea => {
+                    const codProd = linea[0] || 'SIN-CODIGO';
+                    const desc = linea[1] || 'Sin descripción';
+                    const cantOc = Number(linea[2]) || 0;
+                    const enBod = Number(linea[3]) || 0;
+                    const faltan = Number(linea[4]) || 0;
+                    if (!map[codProd]) {
+                        map[codProd] = {
+                            codigo: codProd,
+                            descripcion: desc,
+                            totalCant: 0,
+                            totalBodega: 0,
+                            totalFaltan: 0,
+                            ocs: []
+                        };
+                    }
+                    map[codProd].totalCant += cantOc;
+                    map[codProd].totalBodega += enBod;
+                    map[codProd].totalFaltan += faltan;
+                    map[codProd].ocs.push({
+                        num_oc: oc.num_oc,
+                        proveedor: oc.proveedor,
+                        fecha: oc.fecha,
+                        monto: oc.monto,
+                        tracking: oc.tracking,
+                        cantidad: cantOc,
+                        enBodega: enBod,
+                        faltan: faltan
+                    });
+                });
+            });
+            return map;
+        }
+
+        function estadoProducto(p) {
+            if (p.totalFaltan <= 0) return {t: 'COMPLETO', c: 'chip-ok'};
+            if (p.totalBodega > 0)   return {t: 'PARCIAL',  c: 'chip-warn'};
+            return {t: 'PENDIENTE', c: 'chip-err'};
+        }
+
+        function estadoOc(tracking) {
+            if (!tracking || !tracking[0]) return {t: 'SIN REGISTRAR', c: ''};
+            const txt = String(tracking[0]).replace(/_/g, ' ').toUpperCase();
+            if (txt.includes('ENTREGADO')) return {t: txt, c: 'chip-ok'};
+            if (txt.includes('BODEGA'))    return {t: txt, c: 'chip-info'};
+            if (txt.includes('RUTA'))      return {t: txt, c: 'chip-warn'};
+            if (txt.includes('CANCEL') || txt.includes('ANULADO')) return {t: txt, c: 'chip-err'};
+            return {t: txt, c: ''};
+        }
+
+        // Una OC se considera "enviada" si su tracking está En Ruta o Entregado
+        function ocEnviada(oc) {
+            if (!oc || !oc.tracking || !oc.tracking[0]) return false;
+            const t = String(oc.tracking[0]).toUpperCase();
+            return t.includes('ENTREGADO') || t.includes('RUTA');
+        }
+
+        // Estado de envío agregado a nivel producto
+        function envioProducto(prod) {
+            const total = prod.ocs.length;
+            if (total === 0) return {t: 'SIN OC', c: '', flag: 'na', count: 0, total: 0};
+            const count = prod.ocs.filter(ocEnviada).length;
+            if (count === total) return {t: `ENVIADA ${count}/${total}`, c: 'chip-ok', flag: 'si', count, total};
+            if (count > 0)       return {t: `PARCIAL ${count}/${total}`, c: 'chip-warn', flag: 'parcial', count, total};
+            return {t: `NO ENVIADA 0/${total}`, c: 'chip-err', flag: 'no', count, total};
+        }
+
+        // Fecha de última salida registrada entre las OCs enviadas del producto
+        function fechaUltimaSalida(prod) {
+            const times = [];
+            (prod.ocs || []).forEach(oc => {
+                if (!ocEnviada(oc)) return;
+                const fs = oc.tracking && oc.tracking[1];
+                if (!fs) return;
+                const d = new Date(fs);
+                if (!isNaN(d.getTime())) times.push(d.getTime());
+            });
+            return times.length ? new Date(Math.max(...times)) : null;
+        }
+
+        // Días de atraso (positivo = atrasada) respecto a fecha_requerida
+        function diasAtraso(req) {
+            if (!req.fecha_requerida) return null;
+            const fr = new Date(req.fecha_requerida);
+            if (isNaN(fr.getTime())) return null;
+            const hoy = new Date();
+            const diffDias = Math.floor((hoy.setHours(0,0,0,0) - fr.setHours(0,0,0,0)) / 86400000);
+            return diffDias;
+        }
+
+        // Cantidad de productos con faltantes en la req (para badge en sidebar)
+        function productosFaltantesCount(req) {
+            const set = new Set();
+            (req.ordenes || []).forEach(oc => {
+                (oc.lineas || []).forEach(l => {
+                    const faltan = Number(l[4]) || 0;
+                    if (faltan > 0 && l[0]) set.add(l[0]);
+                });
+            });
+            return set.size;
+        }
+
+        // Comparadores de productos según orden seleccionado
+        let currentSortBy = 'faltan-desc';
+        function compareProductos(a, b) {
+            if (currentSortBy === 'faltan-desc') {
+                if (b.totalFaltan !== a.totalFaltan) return b.totalFaltan - a.totalFaltan;
+                return String(a.codigo).localeCompare(String(b.codigo));
+            }
+            if (currentSortBy === 'codigo-asc') return String(a.codigo).localeCompare(String(b.codigo));
+            if (currentSortBy === 'desc-asc')   return String(a.descripcion).localeCompare(String(b.descripcion));
+            return 0;
+        }
+
+        // ¿Req matchea con el filtro del sidebar (NumReq, código o descripción de producto)?
+        function reqMatchesFilter(req, filter) {
+            if (!filter) return true;
+            const f = String(filter).trim().toLowerCase();
+            if (!f) return true;
+            if (String(req.num_req).toLowerCase().includes(f)) return true;
+            return (req.ordenes || []).some(oc =>
+                (oc.lineas || []).some(l =>
+                    String(l[0] || '').toLowerCase().includes(f) ||
+                    String(l[1] || '').toLowerCase().includes(f)
+                )
+            );
+        }
+
+        // Renderizar detalle como árbol accordion (req → productos → OCs)
+        function renderDetail(req) {
+            const statusClass = (req.estado || '').toUpperCase().includes('APROBADO') ? 'approved' :
+                               (req.estado || '').toUpperCase().includes('RECHAZADO') ? 'rejected' : 'pending';
+
+            const productosMap = buildProductosMap(req);
+            const productos = Object.values(productosMap);
+            productos.sort(compareProductos);
+
+            const totalOcs = (req.ordenes || []).length;
+            const ocsEntregadas = (req.ordenes || []).filter(o =>
+                o.tracking && String(o.tracking[0] || '').toUpperCase().includes('ENTREGADO')
+            ).length;
+            const totalFaltanReq = productos.reduce((s, p) => s + (p.totalFaltan || 0), 0);
+
+            // Atraso vs fecha requerida
+            const atraso = diasAtraso(req);
+            let atrasoHtml = '';
+            if (atraso !== null) {
+                if (atraso > 0)      atrasoHtml = `<span class="detail-field-value status rejected" style="margin-left:8px;">${atraso} día${atraso === 1 ? '' : 's'} atrasada</span>`;
+                else if (atraso === 0) atrasoHtml = `<span class="detail-field-value status pending" style="margin-left:8px;">Vence hoy</span>`;
+                else                 atrasoHtml = `<span class="detail-field-value status approved" style="margin-left:8px;">Faltan ${Math.abs(atraso)} día${atraso === -1 ? '' : 's'}</span>`;
+            }
+
+            let html = `
+                <div class="detail-header">
+                    <div class="detail-header-title">Requisición #${escapeHtml(req.num_req)}</div>
+                    <div class="detail-grid">
+                        <div class="detail-field">
+                            <span class="detail-field-label">Solicitante</span>
+                            <span class="detail-field-value">${escapeHtml(req.solicitante)}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Centro de Costo</span>
+                            <span class="detail-field-value">${escapeHtml(req.centro_costo)}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Estado</span>
+                            <span class="detail-field-value status ${statusClass}">${escapeHtml(req.estado)}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Fecha Emisión</span>
+                            <span class="detail-field-value">${fmtDate(req.fecha_emision)}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Fecha Requerida</span>
+                            <span class="detail-field-value">
+                                ${fmtDate(req.fecha_requerida)}${atrasoHtml}
+                            </span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Resumen</span>
+                            <span class="detail-field-value">${ocsEntregadas}/${totalOcs} OCs entregadas · Faltan ${fmtNum(totalFaltanReq)} un.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tree-toolbar">
+                    <button type="button" class="tree-toolbar-btn" data-action="expand-all">
+                        <i class="bi bi-arrows-expand"></i> Expandir todo
+                    </button>
+                    <button type="button" class="tree-toolbar-btn" data-action="collapse-all">
+                        <i class="bi bi-arrows-collapse"></i> Colapsar todo
+                    </button>
+                    <select class="tree-toolbar-btn" data-action="sort-products" title="Ordenar productos">
+                        <option value="faltan-desc"${currentSortBy === 'faltan-desc' ? ' selected' : ''}>Orden: más faltantes</option>
+                        <option value="codigo-asc"${currentSortBy === 'codigo-asc' ? ' selected' : ''}>Orden: código</option>
+                        <option value="desc-asc"${currentSortBy === 'desc-asc' ? ' selected' : ''}>Orden: descripción</option>
+                    </select>
+                    <label class="tree-toolbar-filter">
+                        <input type="checkbox" data-action="filter-faltantes">
+                        Solo productos con faltantes
+                    </label>
+                    <label class="tree-toolbar-filter" style="margin-left: 8px;">
+                        <input type="checkbox" data-action="filter-enviadas">
+                        Solo enviadas
+                    </label>
+                </div>
+
+                <div class="ordenes-section">
+                    <div class="ordenes-header">
+                        <span class="ordenes-header-title">Productos de la Requisición</span>
+                        <span class="ordenes-header-count">${productos.length}</span>
+                    </div>
+                    <div class="tree-root" id="treeRoot">
+            `;
+
+            if (productos.length === 0) {
+                html += `<div class="tree-empty"><i class="bi bi-inbox"></i> No hay productos asociados.</div>`;
+            } else {
+                productos.forEach(prod => {
+                    const e = estadoProducto(prod);
+                    const env = envioProducto(prod);
+                    const ultSalida = fechaUltimaSalida(prod);
+                    const ultSalidaChip = ultSalida
+                        ? `<span class="tree-chip chip-info" title="Última salida registrada"><i class="bi bi-calendar-check"></i> Salida ${fmtDate(ultSalida)}</span>`
+                        : '';
+                    html += `
+                        <div class="tree-node tree-level-2" data-node-product
+                             data-faltan="${prod.totalFaltan}" data-enviada="${env.flag}">
+                            <div class="tree-node-header" data-toggle-node>
+                                <i class="bi bi-chevron-right tree-chevron"></i>
+                                <span class="tree-node-title">
+                                    <span class="tree-code">${escapeHtml(prod.codigo)}</span>${escapeHtml(prod.descripcion)}
+                                </span>
+                                <span class="tree-node-meta">
+                                    <span class="tree-chip">Pedido ${fmtNum(prod.totalCant)}</span>
+                                    <span class="tree-chip chip-ok">Bodega ${fmtNum(prod.totalBodega)}</span>
+                                    <span class="tree-chip ${prod.totalFaltan > 0 ? 'chip-err' : 'chip-ok'}">Faltan ${fmtNum(prod.totalFaltan)}</span>
+                                    <span class="tree-chip ${e.c}" title="Estado de stock en bodega"><i class="bi bi-box-seam"></i> ${e.t}</span>
+                                    <span class="tree-chip ${env.c}" title="OCs enviadas (En Ruta o Entregado)"><i class="bi bi-truck"></i> ${env.t}</span>
+                                    ${ultSalidaChip}
+                                </span>
+                            </div>
+                            <div class="tree-node-body">
+                    `;
+
+                    if (prod.ocs.length === 0) {
+                        html += `<div class="tree-empty">Sin OCs asignadas a este producto.</div>`;
+                    } else {
+                        prod.ocs.forEach(oc => {
+                            const eoc = estadoOc(oc.tracking);
+                            const stockClass = oc.faltan <= 0 ? 'ok' : (oc.enBodega > 0 ? 'warn' : 'err');
+                            html += `
+                                <div class="tree-leaf">
+                                    <div class="tree-leaf-header">
+                                        <span class="tree-leaf-title">OC #${escapeHtml(oc.num_oc)}</span>
+                                        <span class="tree-chip ${eoc.c}">${escapeHtml(eoc.t)}</span>
+                                        <button type="button" class="tree-leaf-more"
+                                                data-open-oc="${escapeHtml(oc.num_oc)}"
+                                                data-open-req="${escapeHtml(req.num_req)}">
+                                            Ver detalle
+                                        </button>
+                                    </div>
+                                    <div class="tree-leaf-details">
+                                        <div class="tree-leaf-detail">
+                                            <span class="tree-leaf-detail-label">Proveedor</span>
+                                            <span class="tree-leaf-detail-value" title="${escapeHtml(oc.proveedor)}">${escapeHtml(oc.proveedor)}</span>
+                                        </div>
+                                        <div class="tree-leaf-detail">
+                                            <span class="tree-leaf-detail-label">Fecha OC</span>
+                                            <span class="tree-leaf-detail-value">${fmtDate(oc.fecha)}</span>
+                                        </div>
+                                        <div class="tree-leaf-detail">
+                                            <span class="tree-leaf-detail-label">Cantidad</span>
+                                            <span class="tree-leaf-detail-value">${fmtNum(oc.cantidad)}</span>
+                                        </div>
+                                        <div class="tree-leaf-detail">
+                                            <span class="tree-leaf-detail-label">En Bodega</span>
+                                            <span class="tree-leaf-detail-value ok">${fmtNum(oc.enBodega)}</span>
+                                        </div>
+                                        <div class="tree-leaf-detail">
+                                            <span class="tree-leaf-detail-label">Faltan</span>
+                                            <span class="tree-leaf-detail-value ${stockClass}">${fmtNum(oc.faltan)}</span>
+                                        </div>
+                                        <div class="tree-leaf-detail">
+                                            <span class="tree-leaf-detail-label">Monto</span>
+                                            <span class="tree-leaf-detail-value">$${fmtNum(oc.monto)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        // Mostrar detalle de orden
+        function showOdenDetail(numOc, numReq) {
+            const req = requisiciones.find(r => r.num_req === numReq);
+            const oc = req.ordenes.find(o => o.num_oc === numOc);
+
+            if (!oc) return;
+
+            document.getElementById('modalOcNumber').textContent = numOc;
+
+            let contentHTML = `
+                <div class="orden-detail-section">
+                    <div class="orden-detail-section-title">Información General</div>
+                    <div class="orden-detail-grid">
+                        <div class="detail-field">
+                            <span class="detail-field-label">Proveedor</span>
+                            <span class="detail-field-value">${oc.proveedor}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Fecha OC</span>
+                            <span class="detail-field-value">${new Date(oc.fecha).toLocaleDateString('es-ES')}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Centro de Costo</span>
+                            <span class="detail-field-value">${oc.centro_costo}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">Monto Total</span>
+                            <span class="detail-field-value">$${(oc.monto || 0).toLocaleString('es-ES')}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (oc.tracking) {
+                contentHTML += `
+                    <div class="orden-detail-section">
+                        <div class="orden-detail-section-title">Estado en Bodega</div>
+                        <div class="orden-detail-grid">
+                            <div class="detail-field">
+                                <span class="detail-field-label">Estado</span>
+                                <span class="detail-field-value">${oc.tracking[0].replace(/_/g, ' ')}</span>
+                            </div>
+                            <div class="detail-field">
+                                <span class="detail-field-label">Registrado por</span>
+                                <span class="detail-field-value">${oc.tracking[3] || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            contentHTML += `
+                <div class="orden-detail-section">
+                    <div class="orden-detail-section-title">Productos (${oc.lineas.length})</div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+            `;
+
+            oc.lineas.forEach(linea => {
+                const cant = linea[2] || 0;
+                const enBodega = linea[3] || 0;
+                const faltan = linea[4] || 0;
+                const ocLink = linea[5] || oc.num_oc;
+                const fmt = (n) => n.toLocaleString('es-ES', {minimumFractionDigits: 2});
+                const estadoStock = faltan <= 0
+                    ? '<span style="color:#065f46;font-weight:800;">COMPLETO</span>'
+                    : (enBodega > 0
+                        ? '<span style="color:#92400e;font-weight:800;">PARCIAL</span>'
+                        : '<span style="color:#991b1b;font-weight:800;">PENDIENTE</span>');
+                contentHTML += `
+                    <div class="producto-item">
+                        <div class="producto-codigo">${linea[0] || 'N/A'}</div>
+                        <div class="producto-desc">${linea[1] || 'Sin descripción'}</div>
+                        <div class="producto-qty" style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px;margin-top:6px;">
+                            <div>OC enlazada: <strong>#${ocLink}</strong></div>
+                            <div>Estado: ${estadoStock}</div>
+                            <div>Cantidad OC: <strong>${fmt(cant)}</strong></div>
+                            <div>En bodega: <strong style="color:#065f46;">${fmt(enBodega)}</strong></div>
+                            <div style="grid-column:1 / -1;">Faltan: <strong style="color:${faltan > 0 ? '#991b1b' : '#065f46'};">${fmt(faltan)}</strong></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            contentHTML += '</div></div>';
+            document.getElementById('modalContent').innerHTML = contentHTML;
+            document.getElementById('ordenModal').classList.add('show');
+        }
+
+        function closeOdenModal() {
+            document.getElementById('ordenModal').classList.remove('show');
+        }
+
+        // Búsqueda
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            renderRequisiciones(e.target.value);
+        });
+
+        // Delegación de eventos del árbol (CSP-safe, una sola vez)
+        const detailContentEl = document.getElementById('detailContent');
+
+        detailContentEl.addEventListener('click', (evt) => {
+            const header = evt.target.closest('[data-toggle-node]');
+            if (header && detailContentEl.contains(header)) {
+                header.parentElement.classList.toggle('expanded');
+                return;
+            }
+            const more = evt.target.closest('[data-open-oc]');
+            if (more && detailContentEl.contains(more)) {
+                evt.stopPropagation();
+                const numOc = parseInt(more.dataset.openOc, 10);
+                const numReq = parseInt(more.dataset.openReq, 10);
+                if (!isNaN(numOc) && !isNaN(numReq)) showOdenDetail(numOc, numReq);
+                return;
+            }
+            const btn = evt.target.closest('[data-action]');
+            if (btn && detailContentEl.contains(btn) && btn.tagName === 'BUTTON') {
+                const action = btn.dataset.action;
+                const root = document.getElementById('treeRoot');
+                if (!root) return;
+                if (action === 'expand-all') {
+                    root.querySelectorAll('.tree-node').forEach(n => n.classList.add('expanded'));
+                } else if (action === 'collapse-all') {
+                    root.querySelectorAll('.tree-node').forEach(n => n.classList.remove('expanded'));
+                }
+            }
+        });
+
+        function applyTreeFilters() {
+            const fFaltantes = detailContentEl.querySelector('[data-action="filter-faltantes"]');
+            const fEnviadas  = detailContentEl.querySelector('[data-action="filter-enviadas"]');
+            const onlyFaltantes = !!(fFaltantes && fFaltantes.checked);
+            const onlyEnviadas  = !!(fEnviadas && fEnviadas.checked);
+            document.querySelectorAll('[data-node-product]').forEach(n => {
+                const faltan = parseFloat(n.dataset.faltan) || 0;
+                const enviada = n.dataset.enviada || 'na';
+                let hidden = false;
+                if (onlyFaltantes && faltan <= 0) hidden = true;
+                if (onlyEnviadas && enviada !== 'si') hidden = true;
+                n.style.display = hidden ? 'none' : '';
+            });
+        }
+
+        detailContentEl.addEventListener('change', (evt) => {
+            if (!evt.target || !evt.target.matches) return;
+            if (evt.target.matches('[data-action="filter-faltantes"]') ||
+                evt.target.matches('[data-action="filter-enviadas"]')) {
+                applyTreeFilters();
+                return;
+            }
+            if (evt.target.matches('[data-action="sort-products"]')) {
+                currentSortBy = evt.target.value || 'faltan-desc';
+                const prevFalt = detailContentEl.querySelector('[data-action="filter-faltantes"]');
+                const prevEnv  = detailContentEl.querySelector('[data-action="filter-enviadas"]');
+                const prevFaltChecked = !!(prevFalt && prevFalt.checked);
+                const prevEnvChecked  = !!(prevEnv  && prevEnv.checked);
+                const req = requisiciones.find(r => r.num_req === currentSelectedReq);
+                if (req) {
+                    renderDetail(req);
+                    const fFalt = detailContentEl.querySelector('[data-action="filter-faltantes"]');
+                    const fEnv  = detailContentEl.querySelector('[data-action="filter-enviadas"]');
+                    if (fFalt) fFalt.checked = prevFaltChecked;
+                    if (fEnv)  fEnv.checked  = prevEnvChecked;
+                    applyTreeFilters();
+                }
+            }
+        });
+
+        // Tecla ESC cierra el modal de OC
+        document.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Escape') {
+                const modal = document.getElementById('ordenModal');
+                if (modal && modal.classList.contains('show')) {
+                    closeOdenModal();
+                }
+            }
+        });
+
+        // Inicializar
+        renderRequisiciones();
+    </script>
+</body>
+</html>

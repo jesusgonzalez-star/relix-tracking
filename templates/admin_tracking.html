@@ -1,0 +1,83 @@
+{% extends "admin_layout.html" %}
+{% block title %}Tracking completo{% endblock %}
+{% block admin_page_heading %}Tracking completo{% endblock %}
+{% block admin_page_subtitle %}Vista unificada: maestro Softland y filas solo locales, con paginación.{% endblock %}
+
+{% block admin_content %}
+<div class="table-container admin-table-wrap">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="metric-chip"><span class="chip-dot"></span>{{ total or 0 }} registros</span>
+            <span class="text-muted small">Página {{ page or 1 }} de {{ total_pages or 1 }}</span>
+        </div>
+        {% set p = page or 1 %}
+        {% set tp = total_pages or 1 %}
+        {% if tp > 1 %}
+        <nav aria-label="Paginación">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if p <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('frontend.tracking_completo', page=p - 1) if p > 1 else '#' }}">Anterior</a>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">{{ p }} / {{ tp }}</span>
+                </li>
+                <li class="page-item {% if p >= tp %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('frontend.tracking_completo', page=p + 1) if p < tp else '#' }}">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle dashboard-table">
+            <thead class="bg-light">
+                <tr>
+                    <th>Folio</th>
+                    <th>Estado</th>
+                    <th>Recepción bodega</th>
+                    <th>Despacho</th>
+                    <th>Entrega</th>
+                    <th>Recibido por</th>
+                    <th>Transportista</th>
+                    <th>Guía</th>
+                    <th>Proveedor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in tracking %}
+                {% set st = (item[1] or '')|string|upper|replace('_',' ') %}
+                {% if 'ENTREGADO' in st %}
+                    {% set badge_cls = 'bg-success' %}
+                {% elif 'RUTA' in st %}
+                    {% set badge_cls = 'bg-info text-dark' %}
+                {% elif 'BODEGA' in st or 'INGRESADO' in st or 'DISPONIBLE' in st %}
+                    {% set badge_cls = 'bg-primary' %}
+                {% elif 'PENDIENTE' in st %}
+                    {% set badge_cls = 'bg-warning text-dark' %}
+                {% else %}
+                    {% set badge_cls = 'bg-secondary' %}
+                {% endif %}
+                <tr>
+                    <td><span class="folio-pill">#{{ item[0] }}</span></td>
+                    <td><span class="badge {{ badge_cls }}">{{ item[1] }}</span></td>
+                    <td class="small">{{ item[2] or '—' }}</td>
+                    <td class="small">{{ item[3] or '—' }}</td>
+                    <td class="small">{{ item[4] or '—' }}</td>
+                    <td class="small">{{ item[5] or '—' }}</td>
+                    <td class="small">{{ item[6] or '—' }}</td>
+                    <td class="small">{{ item[7] or '—' }}</td>
+                    <td class="small text-muted">{{ item[11] if item|length > 11 else '—' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-5">
+                        <i class="bi bi-diagram-2 fs-2 d-block mb-2"></i>No hay filas de tracking para mostrar.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

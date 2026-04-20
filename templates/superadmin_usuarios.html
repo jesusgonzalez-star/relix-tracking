@@ -1,0 +1,240 @@
+{% extends "admin_layout.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block admin_page_heading %}Gestión de usuarios{% endblock %}
+{% block admin_page_subtitle %}Alta de cuentas, roles operativos y mantenimiento de accesos. Solo perfiles autorizados.{% endblock %}
+
+{% block admin_content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm admin-card">
+            <div class="card-body p-4">
+                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2 mb-3">
+                    <h2 class="h5 text-primary mb-0"><i class="bi bi-person-plus me-2"></i>Nuevo usuario</h2>
+                    <form action="{{ url_for('frontend.reset_local_tracking_data') }}" method="POST" class="d-flex align-items-center">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button
+                            type="submit"
+                            class="btn btn-danger fw-bold shadow-sm"
+                            title="Vacía solo datos locales para comenzar pruebas"
+                            onclick="return confirm('Esto vaciará SOLO la base local de tracking/envíos. No afecta Softland ni usuarios. ¿Desea continuar?');"
+                        >
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>RESET BD LOCAL (SOLO PRUEBAS)
+                        </button>
+                    </form>
+                </div>
+                {% if can_delete_users %}
+                <p class="small text-muted mb-3">
+                    <i class="bi bi-shield-check text-success me-1"></i>
+                    Modo superadministrador: puede eliminar usuarios (no la cuenta base <code>superadmin</code> ni su propia sesión).
+                </p>
+                {% else %}
+                <p class="small text-muted mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Solo el rol SUPERADMIN puede eliminar usuarios.
+                </p>
+                {% endif %}
+                <p class="small text-muted mb-4">Contraseña: mínimo 8 caracteres, al menos una letra y un número.</p>
+
+                <form method="POST" class="row g-3 align-items-end" id="formCreateUsuario">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="create">
+                    <div class="col-md-6 col-lg-3">
+                        <label class="form-label">Usuario</label>
+                        <input type="text" name="usuario" class="form-control" required autocomplete="off">
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="form-label">Nombre completo</label>
+                        <input type="text" name="nombre" class="form-control" required>
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="form-label">Rol</label>
+                        <select name="rol" class="form-select" required>
+                            {% for rol in roles_creables %}
+                            <option value="{{ rol }}">{{ rol }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <label class="form-label">Contraseña</label>
+                        <input type="password" name="password" class="form-control" required minlength="8" autocomplete="new-password">
+                    </div>
+                    <div class="col-12" id="createCcWrap" style="display: none;">
+                        <div class="cc-filter-container">
+                            <label class="form-label mb-1" for="createCcSelect">Centros de costo <span class="text-muted fw-normal">(rol FAENA o SUPERVISOR_CONTRATO)</span></label>
+                            <select id="createCcSelect" name="cc_asignados" class="form-select form-select-sm" multiple size="8" aria-label="Centros de costo">
+                                {% for cc in centros_costo_opciones %}
+                                <option value="{{ cc }}">{{ cc }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Mismo criterio que el filtro por CC del panel: valores de OC en Softland. Use <strong>Ctrl</strong> (<strong>⌘</strong> en Mac) para elegir varios.</div>
+                        </div>
+                        {% if not centros_costo_opciones %}
+                        <p class="text-warning small mb-0 mt-2"><i class="bi bi-exclamation-triangle me-1"></i>No se listaron centros desde el ERP; asigne CC cuando la conexión a Softland esté disponible.</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary btn-inline-primary px-4">
+                            <i class="bi bi-person-plus-fill me-1"></i>Crear usuario
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="table-container admin-table-wrap">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h2 class="h5 mb-0 premium-page-title"><i class="bi bi-people me-2"></i>Usuarios registrados</h2>
+                <span class="metric-chip"><span class="chip-dot"></span>{{ usuarios|length }} cuentas</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle dashboard-table admin-user-table">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Centros de costo</th>
+                            <th>Estado</th>
+                            <th class="text-end" style="min-width: 260px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in usuarios %}
+                        <tr>
+                            <td><span class="text-muted small">#{{ u[0] }}</span></td>
+                            <td><span class="fw-semibold">{{ u[1] }}</span></td>
+                            <td>{{ u[2] or '—' }}</td>
+                            <td class="small">{{ u[3] or '—' }}</td>
+                            <td><span class="badge bg-secondary">{{ u[4] }}</span></td>
+                            <td style="max-width: 22rem;">
+                                {% if u[4] in ('FAENA', 'SUPERVISOR_CONTRATO') %}
+                                    {% if u[6] %}
+                                        <div class="d-flex flex-wrap gap-1">
+                                            {% for cc_item in u[6].split(',') %}
+                                            {% set cc_trimmed = cc_item.strip() %}
+                                            {% if cc_trimmed %}
+                                            <span class="badge bg-light text-dark border" style="font-size:.7rem; font-weight:500;">{{ cc_trimmed }}</span>
+                                            {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Sin asignar</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {{ 'bg-success' if u[5] else 'bg-danger' }}">
+                                    {{ 'Activo' if u[5] else 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex flex-column flex-xl-row gap-2 justify-content-xl-end align-items-stretch align-items-xl-center">
+                                    {% if u[4] in ('FAENA', 'SUPERVISOR_CONTRATO') %}
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#cc-{{ u[0] }}" aria-expanded="false">
+                                        <i class="bi bi-building me-1"></i>Centros de costo
+                                    </button>
+                                    {% endif %}
+                                    <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#pwd-{{ u[0] }}" aria-expanded="false">
+                                        <i class="bi bi-key me-1"></i>Cambiar clave
+                                    </button>
+                                    {% if can_delete_users and u[1] != 'superadmin' %}
+                                    <form method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar al usuario {{ u[1] }}? Esta acción no se puede deshacer.');">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="usuario_id" value="{{ u[0] }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger w-100 w-xl-auto">
+                                            <i class="bi bi-trash me-1"></i>Eliminar
+                                        </button>
+                                    </form>
+                                    {% elif not can_delete_users %}
+                                    <span class="text-muted small align-self-center">—</span>
+                                    {% endif %}
+                                </div>
+                                {% if u[4] in ('FAENA', 'SUPERVISOR_CONTRATO') %}
+                                <div class="collapse mt-2" id="cc-{{ u[0] }}">
+                                    <form method="POST" class="card card-body p-3 bg-light border-0 text-start">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="action" value="update_cc">
+                                        <input type="hidden" name="usuario_id" value="{{ u[0] }}">
+                                        <label class="form-label small mb-1" for="ccSelect{{ u[0] }}">Centros de costo — <strong>{{ u[1] }}</strong></label>
+                                        <div class="cc-filter-container mb-2">
+                                            <select id="ccSelect{{ u[0] }}" name="cc_asignados" class="form-select form-select-sm" multiple size="8" aria-label="Centros de costo">
+                                                {% for cc in centros_costo_opciones %}
+                                                <option value="{{ cc }}" {% if cc in cc_por_usuario.get(u[0], []) %}selected{% endif %}>{{ cc }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="form-text mb-2">Sin selección = ningún CC. <strong>Ctrl</strong> / <strong>⌘</strong> para múltiples. Incluye CC históricos ya asignados aunque no estén en el ERP.</div>
+                                        {% if not centros_costo_opciones and not cc_por_usuario.get(u[0]) %}
+                                        <p class="text-warning small">No hay opciones desde Softland.</p>
+                                        {% endif %}
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            <i class="bi bi-check2-circle me-1"></i>Guardar centros de costo
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                                <div class="collapse mt-2" id="pwd-{{ u[0] }}">
+                                    <form method="POST" class="card card-body p-3 bg-light border-0 text-start">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="action" value="change_password">
+                                        <input type="hidden" name="usuario_id" value="{{ u[0] }}">
+                                        <div class="row g-2">
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Nueva contraseña</label>
+                                                <input type="password" name="new_password" class="form-control form-control-sm" minlength="8" required placeholder="Mín. 8 caracteres">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Confirmar</label>
+                                                <input type="password" name="confirm_password" class="form-control form-control-sm" minlength="8" required placeholder="Repetir">
+                                            </div>
+                                            <div class="col-12">
+                                                <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('¿Cambiar contraseña de {{ u[1] }}?');">
+                                                    Guardar nueva clave
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-2 d-block mb-2"></i>No hay usuarios registrados.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block admin_scripts %}
+<script>
+(function () {
+    const rol = document.getElementById('formCreateUsuario')?.querySelector('select[name="rol"]');
+    const wrap = document.getElementById('createCcWrap');
+    function syncCreateCc() {
+        if (!rol || !wrap) return;
+        wrap.style.display = (rol.value === 'FAENA' || rol.value === 'SUPERVISOR_CONTRATO') ? 'block' : 'none';
+    }
+    if (rol) {
+        rol.addEventListener('change', syncCreateCc);
+        syncCreateCc();
+    }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,123 @@
+# ============================================
+# Secretos / variables de entorno
+# ============================================
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+*.egg
+.installed.cfg
+build/
+dist/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================
+# Testing / Coverage
+# ============================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.hypothesis/
+nosetests.xml
+
+# ============================================
+# Base de datos local (SQLite)
+# ============================================
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+instance/
+
+# ============================================
+# Logs y crash reports
+# ============================================
+*.log
+logs/
+app.log
+supervisor_debug.log
+migration.log
+live_crash.txt
+
+# ============================================
+# Storage / uploads de usuarios (no versionar datos)
+# ============================================
+storage/
+!storage/.gitkeep
+
+# ============================================
+# Migraciones de Alembic (opcional, descomentar si no se versiona)
+# ============================================
+# migrations/versions/*.py
+# !migrations/versions/.gitkeep
+
+# ============================================
+# IDE / Editores
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ============================================
+# OS
+# ============================================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ============================================
+# Backups y temporales
+# ============================================
+*.bak
+*.bak.*
+*.tmp
+*.temp
+*.orig
+*~.nib
+
+# ============================================
+# Artefactos de deploy / secretos
+# ============================================
+deploy/secrets/
+*.pem
+*.key
+*.crt
+!deploy/*.conf.example
+CREDENCIALES*.md
+CREDENCIALES*.txt
+credenciales*.md
+credentials*.md
+
+# ============================================
+# Específico del proyecto
+# ============================================
+# Claude Code y agentes de IA (directorios locales de sesión)
+.claude/
+.cursor/
+

@@ -1,0 +1,5 @@
+# Ver docs/REPORTE_LIMPIEZA_PARA_AGENTE_Y_CONTEXTO.md
+.venv/
+**/__pycache__/
+*.pyc
+docs/historico/

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/img/favicon-16x16.png">
+    <link rel="manifest" href="/static/img/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="fade-in-up">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand navbar-brand-logo-only py-0" href="/" title="Inicio">
+                <img src="/static/img/relix-logo.png" alt="" class="brand-logo-img">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Mostrar menú de navegación">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                {% if can_view_global %}
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 mt-2 mt-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link text-white admin-top-link" href="{{ url_for('frontend.tracking_completo') }}"><i class="bi bi-diagram-3 me-1"></i>Tracking</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white admin-top-link" href="{{ url_for('frontend.reportes') }}"><i class="bi bi-graph-up-arrow me-1"></i>Reportes</a>
+                    </li>
+                </ul>
+                {% endif %}
+                <div class="d-flex flex-column flex-lg-row ms-lg-auto align-items-lg-center gap-2 mt-2 mt-lg-0">
+                    <span class="nav-link text-white py-1 mb-0">
+                        <i class="bi bi-person-circle me-1"></i>{{ session.get('nombre') or session.get('username') or 'Usuario' }}
+                        <span class="badge bg-light text-dark ms-1 border">{{ session.rol if 'rol' in session else '' }}</span>
+                    </span>
+                    <a class="btn btn-outline-light btn-sm" href="/logout">
+                        <i class="bi bi-box-arrow-right me-1"></i>Salir
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container main-container">
+        <!-- Mensajes flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                        <i class="bi bi-info-circle-fill me-2"></i> {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const alerts = document.querySelectorAll('.alert');
+                        alerts.forEach(function(alert) {
+                            setTimeout(function() {
+                                const bsAlert = new bootstrap.Alert(alert);
+                                bsAlert.close();
+                            }, 60000);
+                        });
+                    });
+                </script>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Notificaciones de discrepancias en bodega -->
+        {% if session.get('notificaciones_bodega') %}
+        <div class="alert alert-warning alert-dismissible fade show shadow-sm mb-4" role="alert">
+            <h5 class="alert-heading mb-2">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Recepción con diferencias desde faena
+                <span class="badge bg-warning text-dark ms-2">{{ session.notificaciones_bodega|length }}</span>
+            </h5>
+            <p class="mb-2 text-muted small">Los siguientes productos llegaron con faltante o daño registrado:</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0 bg-white">
+                    <thead class="table-warning">
+                        <tr>
+                            <th>Guía</th><th>OC</th><th>Producto</th>
+                            <th>Enviado</th><th>Recibido</th><th>Estado</th>
+                            <th>Motivo</th><th>Recibido por</th><th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for n in session.notificaciones_bodega %}
+                        <tr>
+                            <td>{{ n.GuiaDespacho or '—' }}</td>
+                            <td>{{ n.NumOc }}</td>
+                            <td><strong>{{ n.CodProd }}</strong><br><small>{{ n.DescProd or '—' }}</small></td>
+                            <td>{{ n.CantEnviada }}</td>
+                            <td class="fw-bold text-danger">{{ n.CantRecibida }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'warning text-dark' if n.EstadoLinea == 'PARCIAL' else 'danger' }}">
+                                    {{ n.EstadoLinea }}
+                                </span>
+                            </td>
+                            <td><em>{{ n.MotivoRechazo or '—' }}</em></td>
+                            <td>{{ n.RecibidoPor or '—' }}</td>
+                            <td class="text-muted small">
+                                {% if n.FechaRecepcion %}
+                                    {{ n.FechaRecepcion|datefmt('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% if session.pop('notificaciones_bodega', None) is not none %}{% endif %}
+        {% endif %}
+
+        <!-- Estadísticas -->
+        <div class="soft-panel p-3 p-md-4 mb-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <div>
+                    <h3 class="premium-page-title mb-1">Panel Operacional</h3>
+                    <div class="premium-subtitle">Seguimiento completo de OC, despacho y recepción en tiempo real.</div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="metric-chip"><span class="chip-dot"></span>Actualización continua</span>
+                    <span class="metric-chip"><span class="chip-dot"></span>Visión por rol</span>
+                    {% if auto_refresh_ms and auto_refresh_ms > 0 %}
+                    <button type="button" id="refreshToggle" class="btn btn-outline-secondary btn-sm refresh-toggle-btn">
+                        <i class="bi bi-pause-circle me-1"></i>Pausar actualización
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="row g-4">
+            <div class="col-md-6 col-lg-3">
+                <div class="stat-card h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6>Total Órdenes</h6>
+                            <h2>{{ estadisticas[0] or 0 }}</h2>
+                        </div>
+                        <div class="stat-icon">
+                            <i class="bi bi-file-earmark-text"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="stat-card h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6>En Bodega</h6>
+                            <h2>{{ estadisticas[1] or 0 }}</h2>
+                        </div>
+                        <div class="stat-icon" style="color: var(--primary-blue);">
+                            <i class="bi bi-house-door"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="stat-card h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6>Despachados</h6>
+                            <h2>{{ estadisticas[2] or 0 }}</h2>
+                        </div>
+                        <div class="stat-icon text-info">
+                            <i class="bi bi-truck"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="stat-card h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6>Entregados</h6>
+                            <h2>{{ estadisticas[3] or 0 }}</h2>
+                        </div>
+                        <div class="stat-icon text-success">
+                            <i class="bi bi-check2-circle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- Tabla de órdenes -->
+        <div class="table-container">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+                <div class="dashboard-title-wrap">
+                    <h4 class="mb-1 dashboard-title">
+                        <i class="bi bi-list-task me-2" style="color: var(--primary-blue);"></i>Órdenes de Compra
+                    </h4>
+                    <div class="dashboard-subtitle">
+                        Monitoreo operativo en tiempo real de compras y despacho.
+                        <span class="ms-2 text-muted">Mostrando {{ page_size or 30 }} folios por página.</span>
+                    </div>
+                </div>
+                <div class="actions-toolbar d-flex gap-2 align-items-center flex-wrap">
+                    <form action="{{ url_for('frontend.index') }}" method="GET" class="d-flex align-items-end gap-2 flex-wrap">
+                        {% if can_dispatch or can_view_global or can_receive %}
+                        <div class="cc-filter-container" style="min-width: 14rem;">
+                            <label for="fechaTipoFiltro" class="form-label mb-1 small text-muted">Fechas según</label>
+                            <select id="fechaTipoFiltro" name="fecha_tipo" class="form-select form-select-sm" aria-label="Tipo de fecha para el rango">
+                                <option value="emision" {% if (fecha_tipo_selected or 'emision') == 'emision' %}selected{% endif %}>Emisión OC (ERP)</option>
+                                <option value="eta" {% if (fecha_tipo_selected or 'emision') == 'eta' %}selected{% endif %}>ETA / entrega estimada (ERP)</option>
+                                <option value="entrega_faena" {% if (fecha_tipo_selected or 'emision') == 'entrega_faena' %}selected{% endif %}>Entrega en faena (fecha real)</option>
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <label for="dashboardDesde" class="form-label mb-1 small text-muted">Desde</label>
+                            <input type="date" id="dashboardDesde" name="desde" class="form-control form-control-sm" value="{{ filtro_desde or '' }}">
+                        </div>
+                        <div>
+                            <label for="dashboardHasta" class="form-label mb-1 small text-muted">Hasta</label>
+                            <input type="date" id="dashboardHasta" name="hasta" class="form-control form-control-sm" value="{{ filtro_hasta or '' }}">
+                        </div>
+                        <div style="min-width: 9rem;">
+                            <label for="dashboardFiltroNumReq" class="form-label mb-1 small text-muted">Requisición</label>
+                            <input type="text" id="dashboardFiltroNumReq" name="num_req" class="form-control form-control-sm" value="{{ num_req_filtro or '' }}" placeholder="N° o parte" autocomplete="off" maxlength="80" title="Filtra el listado por número de requisición (junto con fechas y estado)">
+                        </div>
+                        <div style="min-width: 7.5rem;">
+                            <label for="dashboardFiltroNumOc" class="form-label mb-1 small text-muted">N° OC</label>
+                            <input type="text" id="dashboardFiltroNumOc" name="num_oc" class="form-control form-control-sm" value="{{ num_oc_filtro or '' }}" placeholder="Ej. 58216" inputmode="numeric" autocomplete="off" maxlength="20" pattern="[0-9]*" title="Filtra por número de orden de compra (folio)">
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-funnel me-1"></i>Filtrar fechas
+                            </button>
+                            <a href="{{ url_for('frontend.index') }}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+                        </div>
+                        {% if tracking_estado_selected %}
+                        <input type="hidden" name="tracking_estado" value="{{ tracking_estado_selected }}">
+                        {% endif %}
+                    </form>
+                    <div class="cc-filter-container">
+                        <label for="costCenterFilter" class="visually-hidden">Filtrar por centro de costo</label>
+                        <select id="costCenterFilter" class="form-select form-select-sm" aria-label="Filtrar por centro de costo">
+                            <option value="" {% if not selected_dashboard_cc %}selected{% endif %}>Todos los Centros de Costo</option>
+                            {% for cc in (centros_costo_opciones or []) %}
+                            <option value="{{ cc }}" {% if selected_dashboard_cc and cc == selected_dashboard_cc %}selected{% endif %}>{{ cc }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if can_dispatch or can_receive %}
+                    <form action="{{ url_for('frontend.index') }}" method="GET" class="cc-filter-container" id="trackingStateForm">
+                        <label for="trackingStateFilter" class="visually-hidden">Filtrar por estado tracking</label>
+                        <select id="trackingStateFilter" name="tracking_estado" class="form-select form-select-sm" aria-label="Filtrar por estado tracking">
+                            <option value="" {% if not tracking_estado_selected %}selected{% endif %}>Todos los estados</option>
+                            {% if server_cc_filter_mode %}
+                            <option value="recepcion_parcial" {% if tracking_estado_selected == 'recepcion_parcial' %}selected{% endif %}>Recepción parcial</option>
+                            <option value="recepcion_rechazada" {% if tracking_estado_selected == 'recepcion_rechazada' %}selected{% endif %}>Recepción rechazada</option>
+                            <option value="recepcion_completa" {% if tracking_estado_selected == 'recepcion_completa' %}selected{% endif %}>Recepción completa</option>
+                            <option value="entrega_parcial_faena" {% if tracking_estado_selected == 'entrega_parcial_faena' %}selected{% endif %}>Entrega parcial (bodega → faena)</option>
+                            <option value="en_ruta" {% if tracking_estado_selected == 'en_ruta' %}selected{% endif %}>En ruta (pendiente en faena)</option>
+                            <option value="envio_completo_en_ruta" {% if tracking_estado_selected == 'envio_completo_en_ruta' %}selected{% endif %}>Envío completo en ruta</option>
+                            {% else %}
+                            <option value="no_entregado" {% if tracking_estado_selected == 'no_entregado' %}selected{% endif %}>No entregado</option>
+                            <option value="recepcion_parcial" {% if tracking_estado_selected == 'recepcion_parcial' %}selected{% endif %}>Recepción parcial</option>
+                            <option value="recepcion_rechazada" {% if tracking_estado_selected == 'recepcion_rechazada' %}selected{% endif %}>Recepción rechazada</option>
+                            {% if can_receive %}
+                            <option value="recepcion_completa" {% if tracking_estado_selected == 'recepcion_completa' %}selected{% endif %}>Recepción completa</option>
+                            {% endif %}
+                            {% if not can_receive %}
+                            <option value="entrega_total" {% if tracking_estado_selected == 'entrega_total' %}selected{% endif %}>Recepción completa OC (ERP)</option>
+                            {% endif %}
+                            <option value="entrega_parcial_faena" {% if tracking_estado_selected == 'entrega_parcial_faena' %}selected{% endif %}>Entrega parcial (bodega → faena)</option>
+                            <option value="en_ruta" {% if tracking_estado_selected == 'en_ruta' %}selected{% endif %}>En ruta (pendiente en faena)</option>
+                            {% if can_receive %}
+                            <option value="envio_completo_en_ruta" {% if tracking_estado_selected == 'envio_completo_en_ruta' %}selected{% endif %}>Envío completo en ruta</option>
+                            {% endif %}
+                            {% if not can_receive %}
+                            <option value="entregado" {% if tracking_estado_selected == 'entregado' %}selected{% endif %}>Entregado</option>
+                            {% endif %}
+                            {% endif %}
+                        </select>
+                        {% if filtro_desde %}<input type="hidden" name="desde" value="{{ filtro_desde }}">{% endif %}
+                        {% if filtro_hasta %}<input type="hidden" name="hasta" value="{{ filtro_hasta }}">{% endif %}
+                        {% if fecha_tipo_selected %}<input type="hidden" name="fecha_tipo" value="{{ fecha_tipo_selected }}">{% endif %}
+                        {% if num_req_filtro %}<input type="hidden" name="num_req" value="{{ num_req_filtro }}">{% endif %}
+                        {% if num_oc_filtro %}<input type="hidden" name="num_oc" value="{{ num_oc_filtro }}">{% endif %}
+                        {% if selected_dashboard_cc %}<input type="hidden" name="cc" value="{{ selected_dashboard_cc }}">{% endif %}
+                        <input type="hidden" name="page" value="1">
+                    </form>
+                    {% endif %}
+                    {% if can_search_requisicion %}
+                    <form action="{{ url_for('frontend.buscar_requisicion') }}" method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+                        <div class="input-group input-group-sm oc-input-group">
+                            <span class="input-group-text"><i class="bi bi-file-earmark-text"></i></span>
+                            <label for="dashboardReqSearch" class="visually-hidden">Buscar requisición</label>
+                            <input type="text" id="dashboardReqSearch" name="num_req" class="form-control" placeholder="Buscar requisición (ej: 123 o 12345)" required>
+                        </div>
+                        <input type="hidden" name="modo" value="contiene">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            Buscar Requisición
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if can_reset_local_tracking %}
+                    <form action="{{ url_for('frontend.reset_local_tracking_data') }}" method="POST" class="d-flex align-items-center">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button
+                            type="submit"
+                            class="btn btn-sm btn-danger fw-bold shadow-sm"
+                            title="Vacía solo datos locales para comenzar pruebas"
+                            onclick="return confirm('Esto vaciará SOLO la base local de tracking/envíos. No afecta Softland ni usuarios. ¿Desea continuar?');"
+                        >
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>RESET BD LOCAL (SOLO PRUEBAS)
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if can_dispatch and tracking_estado_selected == 'en_ruta' %}
+                    <div class="w-100 alert alert-light border py-2 small mb-0 mt-1" role="note">
+                        <i class="bi bi-truck me-1"></i>«En ruta»: el rango Desde/Hasta filtra por <strong>fecha de salida desde bodega</strong> (cabecera vigente EN RUTA). El selector «Fechas según» no aplica en este modo.
+                        {% if num_req_filtro %}<span class="d-block mt-1"><i class="bi bi-funnel me-1"></i>Requisición: <strong>{{ num_req_filtro }}</strong></span>{% endif %}
+                        {% if num_oc_filtro %}<span class="d-block mt-1"><i class="bi bi-hash me-1"></i>OC: <strong>{{ num_oc_filtro }}</strong></span>{% endif %}
+                    </div>
+                    {% elif (can_dispatch or can_view_global or can_receive) and fecha_tipo_label %}
+                    <div class="w-100 small text-muted mb-0 mt-1">
+                        <i class="bi bi-calendar-range me-1"></i>Rango aplicado a: <strong>{{ fecha_tipo_label }}</strong>
+                        {% if num_req_filtro %}<span class="ms-2"><i class="bi bi-funnel me-1"></i>Requisición: <strong>{{ num_req_filtro }}</strong></span>{% endif %}
+                        {% if num_oc_filtro %}<span class="ms-2"><i class="bi bi-hash me-1"></i>OC: <strong>{{ num_oc_filtro }}</strong></span>{% endif %}
+                    </div>
+                    {% elif num_req_filtro or num_oc_filtro %}
+                    <div class="w-100 small text-muted mb-0 mt-1">
+                        <i class="bi bi-funnel me-1"></i>Filtro activo{% if num_req_filtro %} — requisición: <strong>{{ num_req_filtro }}</strong>{% endif %}{% if num_oc_filtro %}{% if num_req_filtro %} · {% endif %}OC: <strong>{{ num_oc_filtro }}</strong>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle dashboard-table">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Folio OC / Req</th>
+                            <th>Fechas</th>
+                            <th>Proveedor / Requisición</th>
+                            <th>Centro de Costo</th>
+                            {% if not can_receive %}
+                            <th class="text-end">Monto</th>
+                            {% endif %}
+                            <th>Estado Tracking</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for orden in ordenes %}
+                        {% set bodega_state = orden[18] if orden|length > 18 else 'No entregado' %}
+                        {% set bodega_state_s = (bodega_state|string) if bodega_state is not none else '' %}
+                        {% set estado_cabecera = orden[7] if orden|length > 7 else '' %}
+                        {% set recep_faena = orden[15] if orden|length > 15 else '' %}
+                        {% set can_dispatch_more = orden|length > 22 and orden[22] %}
+                        {# No usar «Entrega total» del ERP: ocultaba Despachar aun faltando guías a faena. Sin N consultas Softland por fila (evita timeout al cargar). #}
+                        {% set envio_parcial_bodega = orden|length > 14 and orden[14] %}
+                        {% set pendiente_despacho_bodega = orden|length > 23 and orden[23] %}
+                        {% set entrega_bodega_completa = (recep_faena == 'Recepcionado completo') and not envio_parcial_bodega %}
+                        <tr>
+                            <td>
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="folio-pill">OC #{{ orden[0] }}</span>
+                                    {% if orden[4] and orden[4] != 'Sin requisición' %}
+                                        <a href="{{ url_for('frontend.detalle_requisicion', folio=orden[0]) }}" class="req-link small">
+                                            <i class="bi bi-link-45deg me-1"></i>REQ {{ orden[4] }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted small">REQ: Sin requisición</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div><i class="bi bi-calendar3 text-muted me-1"></i>{{ orden[1]|dash_date }}</div>
+                                <div class="text-muted small">
+                                    <i class="bi bi-calendar-check me-1"></i>ETA: {{ orden[2]|dash_date }}
+                                    {% if orden[7] == 'Entregado' %}
+                                        {% if orden[2] and orden[10] and (orden[10]|dash_date_key) > (orden[2]|dash_date_key) %}
+                                            <span class="badge bg-danger ms-1">Entregado con atraso</span>
+                                        {% else %}
+                                            <span class="badge bg-success ms-1">Entregado a tiempo</span>
+                                        {% endif %}
+                                    {% elif orden|length > 16 %}
+                                        <span class="badge {{ orden[17] }} ms-1">{{ orden[16] }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary ms-1">Sin ETA</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="fw-medium text-dark">{{ orden[3] }}</div>
+                                {% if orden[4] and orden[4] != 'Sin requisición' %}
+                                <a href="{{ url_for('frontend.detalle_requisicion', folio=orden[0]) }}" class="text-muted small d-inline-block mt-1">
+                                    <i class="bi bi-file-earmark-text me-1"></i>Requisición: {{ orden[4] }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted small d-inline-block mt-1">Sin requisición asociada</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="fw-medium text-dark cc-cell">{{ orden[13] }}</span></td>
+                            {% if not can_receive %}
+                            <td class="text-end fw-semibold">
+                                ${{ "{:,.0f}".format(orden[5]) }}
+                            </td>
+                            {% endif %}
+                            <td class="tracking-state-cell" data-tracking-state="{{ bodega_state if (can_dispatch or can_receive) else '' }}">
+                                <div class="d-flex flex-column align-items-start gap-1">
+                                    {% set bodega_bg = 'danger' if bodega_state == 'Recepción rechazada en faena' else 'success' if bodega_state == 'Despacho completo desde bodega' else 'info text-dark' if bodega_state == 'Pendiente despacho a faena' or bodega_state_s.startswith('En ruta') else 'warning text-dark' if bodega_state == 'Recepción parcial' else 'secondary' %}
+                                    <span class="badge bg-{{ bodega_bg }} px-3 py-2 shadow-sm rounded-pill">
+                                        {{ bodega_state }}
+                                    </span>
+                                    {% if estado_cabecera == 'En Ruta' and not bodega_state_s.startswith('En ruta') %}
+                                    <span class="badge bg-info text-dark px-2 py-1 small rounded-pill">
+                                        <i class="bi bi-truck me-1"></i>En ruta
+                                    </span>
+                                    {% endif %}
+                                    {% if pendiente_despacho_bodega and bodega_state != 'Pendiente despacho a faena' and not bodega_state_s.startswith('En ruta —') %}
+                                    <span class="badge bg-warning text-dark px-2 py-1 small rounded-pill" title="Según Softland y guías registradas, aún hay cantidad en bodega sin despachar">
+                                        <i class="bi bi-box-seam me-1"></i>Queda por despachar en bodega
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <div class="d-flex flex-column align-items-center gap-1">
+                                    {% if orden[7] == 'Entregado' %}
+                                        {% if can_receive %}
+                                            {% set assigned_to_me = (orden|length > 20 and orden[20]) %}
+                                            {% if assigned_to_me %}
+                                                <a href="{{ url_for('frontend.recibir_producto_folio_legacy', folio=orden[0], next=current_list_url) }}" class="btn btn-sm btn-outline-secondary" title="Ver detalle">
+                                                    <i class="bi bi-eye"></i> Ver detalle
+                                                </a>
+                                            {% else %}
+                                                <small class="text-muted">Visible por CC asignado</small>
+                                            {% endif %}
+                                        {% elif can_view_details %}
+                                            <a href="/bodega/recepcion/{{ orden[0] }}" class="btn btn-sm btn-outline-primary btn-action-details" title="Ver Entrega">
+                                                <i class="bi bi-image"></i> Ver Entrega
+                                            </a>
+                                            <small class="text-muted">Orden cerrada en faena</small>
+                                        {% endif %}
+                                    {% else %}
+                                        {% if can_view_details and orden[7] in ['PENDIENTE_EN_SOFTLAND', 'EN_BODEGA', 'INGRESADO', 'DISPONIBLE EN BODEGA', 'En Ruta'] %}
+                                            <a href="/bodega/recepcion/{{ orden[0] }}" class="btn btn-sm btn-outline-primary btn-action-details" title="Ver Detalles">
+                                                <i class="bi bi-box-arrow-in-down"></i> Revisar OC
+                                            </a>
+                                        {% endif %}
+                                        {% if can_dispatch and orden[7] in ['EN_BODEGA', 'INGRESADO', 'DISPONIBLE EN BODEGA', 'En Ruta'] and can_dispatch_more and not entrega_bodega_completa %}
+                                            <a href="/bodega/despacho/{{ orden[0] }}" class="btn btn-sm btn-outline-info btn-action-dispatch" title="Despachar">
+                                                <i class="bi bi-truck"></i> Despachar a Faena
+                                            </a>
+                                            <small class="text-muted">{% if orden[7] == 'En Ruta' %}Otro camión / guía (puede haber varios en ruta){% else %}Siguiente paso recomendado{% endif %}</small>
+                                        {% elif can_dispatch and orden[7] in ['EN_BODEGA', 'INGRESADO', 'DISPONIBLE EN BODEGA', 'En Ruta'] and not entrega_bodega_completa %}
+                                            {% if envio_parcial_bodega %}
+                                            <small class="text-muted">Hay envío parcial a faena; puede completar con otra guía</small>
+                                            {% elif orden[7] == 'En Ruta' %}
+                                            <small class="text-muted">Todo lo ingresado en bodega ya está en ruta</small>
+                                            {% else %}
+                                            <small class="text-muted">Aun sin llegada en bodega</small>
+                                            {% endif %}
+                                        {% endif %}
+                                        {% if can_receive %}
+                                            {% set assigned_to_me = (orden|length > 20 and orden[20]) %}
+                                            {# Recepción: mismo acceso por CC que en backend (recibir_producto / legacy). #}
+                                            <a href="{{ url_for('frontend.recibir_producto_folio_legacy', folio=orden[0], next=current_list_url) }}"
+                                               class="btn btn-sm {{ 'btn-success' if orden[7] == 'En Ruta' else 'btn-outline-secondary' }}"
+                                               title="{{ 'Aceptar recepción / pedido' if orden[7] == 'En Ruta' else 'Ver envíos y recepción' }}">
+                                                <i class="bi {{ 'bi-check2-circle' if orden[7] == 'En Ruta' else 'bi-inboxes' }}"></i>
+                                                {{ 'Aceptar pedido' if orden[7] == 'En Ruta' else 'Recepción / guías' }}
+                                            </a>
+                                            <a href="/bodega/recepcion/{{ orden[0] }}" class="btn btn-sm btn-outline-secondary" title="Ver detalle OC">
+                                                <i class="bi bi-eye"></i> Detalle OC
+                                            </a>
+                                            {% if not assigned_to_me %}
+                                                <small class="text-muted d-block">Visible por CC asignado</small>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 6 if can_receive else 7 }}" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-2 d-block mb-3 text-secondary"></i> 
+                                <span class="fs-5">No hay órdenes registradas para mostrar</span>
+                                {% if num_req_filtro or num_oc_filtro or filtro_desde or filtro_hasta or (fecha_tipo_selected == 'entrega_faena') %}
+                                <p class="small mt-3 mb-0 text-muted" style="max-width: 32rem; margin-left: auto; margin-right: auto;">
+                                    Si aplicó filtros, revise el rango de fechas o la requisición. En «Entrega en faena» solo aparecen OCs con entrega registrada en el sistema (o que coincidan con la requisición en el ERP).
+                                </p>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-center align-items-center gap-2 mt-3 pt-2 flex-wrap">
+                {% if has_previous %}
+                <a href="{{ url_for('frontend.index', page=(page or 1) - 1, desde=filtro_desde, hasta=filtro_hasta, tracking_estado=tracking_estado_selected, fecha_tipo=(fecha_tipo_selected or 'emision'), num_req=(num_req_filtro if num_req_filtro else none), num_oc=(num_oc_filtro if num_oc_filtro else none), cc=(selected_dashboard_cc if selected_dashboard_cc else none)) }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left-circle me-1"></i> Página anterior
+                </a>
+                {% endif %}
+                <span class="metric-chip">
+                    <span class="chip-dot"></span>Página {{ page or 1 }}
+                </span>
+                {% if has_more %}
+                <a href="{{ url_for('frontend.index', page=(page or 1) + 1, desde=filtro_desde, hasta=filtro_hasta, tracking_estado=tracking_estado_selected, fecha_tipo=(fecha_tipo_selected or 'emision'), num_req=(num_req_filtro if num_req_filtro else none), num_oc=(num_oc_filtro if num_oc_filtro else none), cc=(selected_dashboard_cc if selected_dashboard_cc else none)) }}" class="btn btn-outline-primary btn-sm">
+                    Página siguiente <i class="bi bi-arrow-right-circle ms-1"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            var nav = document.getElementById('navbarContent');
+            if (!nav || typeof bootstrap === 'undefined') return;
+            nav.querySelectorAll('a.admin-top-link[href]').forEach(function (a) {
+                a.addEventListener('click', function () {
+                    if (nav.classList.contains('show')) {
+                        try {
+                            bootstrap.Collapse.getOrCreateInstance(nav).hide();
+                        } catch (e) { /* ignore */ }
+                    }
+                });
+            });
+        })();
+    </script>
+    <script>
+        // Auto-actualiza dashboard con posibilidad de pausa.
+        const autoRefreshMs = {{ auto_refresh_ms or 0 }};
+        const refreshToggle = document.getElementById('refreshToggle');
+        const refreshPausedKey = 'dashboard_refresh_paused';
+        let refreshPaused = localStorage.getItem(refreshPausedKey) === '1';
+
+        function updateRefreshToggleUI() {
+            if (!refreshToggle) return;
+            refreshToggle.innerHTML = refreshPaused
+                ? '<i class="bi bi-play-circle me-1"></i>Reanudar actualización'
+                : '<i class="bi bi-pause-circle me-1"></i>Pausar actualización';
+        }
+
+        if (refreshToggle) {
+            updateRefreshToggleUI();
+            refreshToggle.addEventListener('click', function () {
+                refreshPaused = !refreshPaused;
+                localStorage.setItem(refreshPausedKey, refreshPaused ? '1' : '0');
+                updateRefreshToggleUI();
+            });
+        }
+
+        if (autoRefreshMs && autoRefreshMs > 0) {
+            setInterval(function () {
+                if (refreshPaused) return;
+                const activeTag = (document.activeElement && document.activeElement.tagName) || '';
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
+                window.location.reload();
+            }, autoRefreshMs);
+        }
+
+        const costCenterFilter = document.getElementById('costCenterFilter');
+        const trackingStateFilter = document.getElementById('trackingStateFilter');
+        const tableRows = document.querySelectorAll('.table tbody tr');
+
+        function normalizeText(text) {
+            return (text || '')
+                .toString()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .trim();
+        }
+
+        function applyTableFilters() {
+            const ccValue = normalizeText(costCenterFilter?.value);
+
+            tableRows.forEach((row) => {
+                const ccCell = row.querySelector('.cc-cell');
+                const rowCcValue = normalizeText(ccCell?.innerText);
+
+                const matchesCc = !ccValue || rowCcValue === ccValue;
+                row.style.display = matchesCc ? '' : 'none';
+            });
+        }
+
+        function loadCostCenterOptions() {
+            if (!costCenterFilter) return;
+            const existing = new Set();
+            for (let i = 0; i < costCenterFilter.options.length; i++) {
+                const v = (costCenterFilter.options[i].value || '').trim();
+                if (v) existing.add(normalizeText(v));
+            }
+            tableRows.forEach((row) => {
+                const ccCell = row.querySelector('.cc-cell');
+                const ccText = (ccCell?.innerText || '').trim();
+                if (!ccText) return;
+                const key = normalizeText(ccText);
+                if (existing.has(key)) return;
+                existing.add(key);
+                const option = document.createElement('option');
+                option.value = ccText;
+                option.textContent = ccText;
+                costCenterFilter.appendChild(option);
+            });
+        }
+
+        const serverCcFilterMode = {{ 'true' if server_cc_filter_mode else 'false' }};
+        const ccFilterServerSide = {{ 'true' if cc_filter_server_side else 'false' }};
+        if (ccFilterServerSide) {
+            costCenterFilter?.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                const selectedCc = (costCenterFilter?.value || '').trim();
+                if (selectedCc) {
+                    url.searchParams.set('cc', selectedCc);
+                } else {
+                    url.searchParams.delete('cc');
+                }
+                url.searchParams.set('page', '1');
+                window.location.href = url.toString();
+            });
+        } else {
+            costCenterFilter?.addEventListener('change', applyTableFilters);
+        }
+        // Filtro tracking_estado: listener explícito para evitar CSP bloqueando onchange inline.
+        trackingStateFilter?.addEventListener('change', function () {
+            const form = trackingStateFilter.form || document.getElementById('trackingStateForm');
+            if (form) form.submit();
+        });
+        loadCostCenterOptions();
+        try { localStorage.removeItem('dashboard_cc_filter'); } catch (e) { /* ignore */ }
+        if (!serverCcFilterMode) {
+            applyTableFilters();
+        }
+
+        // Auto-dismiss alerts
+        setTimeout(function() {
+            let alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
+            alerts.forEach(alert => {
+                alert.classList.add('fade-out');
+                setTimeout(() => alert.remove(), 500);
+            });
+        }, 5000);
+    </script>
+</body>
+</html>
