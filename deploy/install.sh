@@ -116,23 +116,32 @@ install -m 644 "$APP_DIR/deploy/tracking-app.service" /etc/systemd/system/tracki
 systemctl daemon-reload
 systemctl enable tracking-app.service
 
-echo "[8/8] Instalando VirtualHost de Apache (sin activar) ..."
+echo "[8/9] Instalando VirtualHost de Apache (sin activar) ..."
 install -m 644 "$APP_DIR/deploy/apache-tracking.conf" /etc/apache2/sites-available/tracking.conf
 
 # Redis para rate limiting multi-worker
 systemctl enable --now redis-server || true
+
+echo "[9/9] Programando backup diario vía cron.daily ..."
+if [ -f "$APP_DIR/deploy/backup.sh" ]; then
+    install -m 755 -o root -g root "$APP_DIR/deploy/backup.sh" /etc/cron.daily/tracking-backup
+    echo "    -> /etc/cron.daily/tracking-backup instalado (se ejecuta diariamente)."
+else
+    echo "    -> AVISO: $APP_DIR/deploy/backup.sh no encontrado, saltando cron backup."
+fi
 
 cat <<EOF
 
 ============================================================
 Instalación base completa en Debian. PASOS MANUALES RESTANTES:
 
-  1. Crear base de datos MariaDB (una sola vez):
+  1. Crear base de datos MariaDB e inicializar esquema (una sola vez):
        sudo mariadb -e "
          CREATE DATABASE tracking CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
          CREATE USER 'tracking_app'@'localhost' IDENTIFIED BY 'CAMBIAR_PASSWORD';
          GRANT ALL PRIVILEGES ON tracking.* TO 'tracking_app'@'localhost';
          FLUSH PRIVILEGES;"
+       sudo mariadb tracking < $APP_DIR/deploy/init_db.sql
 
   2. Rellenar /etc/tracking-app/env con valores reales:
        - SECRET_KEY y API_SECRET (generar cada uno con:
@@ -158,9 +167,9 @@ Instalación base completa en Debian. PASOS MANUALES RESTANTES:
        sudo systemctl status tracking-app
        curl http://127.0.0.1:5000/health
 
-  6. Programar backup diario (tras tener credenciales de BD en env):
-       sudo cp $APP_DIR/deploy/backup.sh /etc/cron.daily/tracking-backup
-       sudo chmod +x /etc/cron.daily/tracking-backup
+  6. Verificar backup diario (ya instalado en /etc/cron.daily/tracking-backup):
+       sudo run-parts --test /etc/cron.daily/   # debe listar tracking-backup
+       sudo /etc/cron.daily/tracking-backup     # prueba manual una vez
 
   7. Healthcheck automático cada 5 min (opcional):
        sudo cp $APP_DIR/deploy/healthcheck.sh /usr/local/sbin/tracking-healthcheck

@@ -23,9 +23,29 @@ warnings.filterwarnings(
 )
 
 # Configurar Logging
+# Estrategia: siempre stdout (capturado por systemd/journald en prod, visible en dev).
+# Si LOG_DIR existe y es escribible, añadir también RotatingFileHandler para archivo
+# rotado en disco (10 MB x 10 archivos = 100 MB techo). Aditivo, no bloquea si falla.
+_log_handlers = [logging.StreamHandler()]
+_log_dir = os.environ.get('LOG_DIR', '/var/log/tracking')
+try:
+    if os.path.isdir(_log_dir) and os.access(_log_dir, os.W_OK):
+        from logging.handlers import RotatingFileHandler
+        _file_handler = RotatingFileHandler(
+            os.path.join(_log_dir, 'app.log'),
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=10,              # 10 archivos rotados = 100 MB techo
+            encoding='utf-8',
+        )
+        _log_handlers.append(_file_handler)
+except Exception:
+    # No bloquear arranque si el handler de archivo falla (permisos, disco, etc.)
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=_log_handlers,
 )
 
 def create_app(config_class=LocalDbConfig):
