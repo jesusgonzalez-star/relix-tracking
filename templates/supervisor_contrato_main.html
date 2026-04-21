@@ -1419,18 +1419,20 @@
             return 0;
         }
 
-        // ¿Req matchea con el filtro del sidebar (NumReq, código o descripción de producto)?
+        // ¿Req matchea con el filtro del sidebar?
+        // Busca en: NumReq, NumOC, código de producto, descripción de producto.
         function reqMatchesFilter(req, filter) {
             if (!filter) return true;
             const f = String(filter).trim().toLowerCase();
             if (!f) return true;
             if (String(req.num_req).toLowerCase().includes(f)) return true;
-            return (req.ordenes || []).some(oc =>
-                (oc.lineas || []).some(l =>
+            return (req.ordenes || []).some(oc => {
+                if (String(oc.num_oc || '').toLowerCase().includes(f)) return true;
+                return (oc.lineas || []).some(l =>
                     String(l[0] || '').toLowerCase().includes(f) ||
                     String(l[1] || '').toLowerCase().includes(f)
-                )
-            );
+                );
+            });
         }
 
         // Renderizar detalle como árbol accordion (req → productos → OCs)
@@ -1443,9 +1445,17 @@
             productos.sort(compareProductos);
 
             const totalOcs = (req.ordenes || []).length;
-            const ocsEntregadas = (req.ordenes || []).filter(o =>
-                o.tracking && String(o.tracking[0] || '').toUpperCase().includes('ENTREGADO')
-            ).length;
+            // Una OC se considera "llegó a faena" si tiene envio.fecha_entrega,
+            // con fallback al tracking de cabecera si no hay registro de envío.
+            const ocsEntregadas = (req.ordenes || []).filter(o => {
+                if (o.envio && o.envio.fecha_entrega) return true;
+                return o.tracking && String(o.tracking[0] || '').toUpperCase().includes('ENTREGADO');
+            }).length;
+            const ocsEnRuta = (req.ordenes || []).filter(o => {
+                if (o.envio && o.envio.fecha_salida && !o.envio.fecha_entrega) return true;
+                if (o.envio && o.envio.fecha_entrega) return false;
+                return o.tracking && String(o.tracking[0] || '').toUpperCase().includes('RUTA');
+            }).length;
             const totalFaltanReq = productos.reduce((s, p) => s + (p.totalFaltan || 0), 0);
 
             // Atraso vs fecha requerida
@@ -1485,7 +1495,9 @@
                         </div>
                         <div class="detail-field">
                             <span class="detail-field-label">Resumen</span>
-                            <span class="detail-field-value">${ocsEntregadas}/${totalOcs} OCs entregadas · Faltan ${fmtNum(totalFaltanReq)} un.</span>
+                            <span class="detail-field-value">
+                                ${ocsEntregadas}/${totalOcs} en faena · ${ocsEnRuta} en ruta · Faltan ${fmtNum(totalFaltanReq)} un.
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1861,7 +1873,9 @@
                 const enviada = n.dataset.enviada || 'na';
                 let hidden = false;
                 if (onlyFaltantes && faltan <= 0) hidden = true;
-                if (onlyEnviadas && enviada !== 'si') hidden = true;
+                // "Enviadas" incluye tanto las que salieron completas como las parciales;
+                // solo oculta las que aún no se han movido de bodega.
+                if (onlyEnviadas && enviada !== 'si' && enviada !== 'parcial') hidden = true;
                 n.style.display = hidden ? 'none' : '';
             });
         }

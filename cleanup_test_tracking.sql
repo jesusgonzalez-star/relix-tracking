@@ -1,22 +1,28 @@
 -- ============================================================
--- Limpieza de filas de prueba insertadas para testear los chips
--- de estado del supervisor de contratos (#7064, #7247, #7142 …)
+-- Limpieza de datos de prueba para la vista del supervisor de contratos.
+-- Borra inserts en 3 tablas:
+--   - despachostracking         (chips de estado simple)
+--   - despachosenvio            (viaje + foto de evidencia)
+--   - despachosenviodetalle     (recepción línea por línea en faena)
 --
 -- Ejecutar con:
---   mysql -h localhost -u tracking -prelix tracking < cleanup_test_tracking.sql
--- o desde Python:
 --   python -c "from dotenv import load_dotenv; load_dotenv('.env'); \
 --     import os; from sqlalchemy import create_engine, text; \
 --     eng = create_engine(os.environ['SQLALCHEMY_DATABASE_URI']); \
---     open_sql = open('cleanup_test_tracking.sql').read(); \
---     [eng.connect().execute(text(s)) for s in open_sql.split(';') if s.strip() and not s.strip().startswith('--')]"
---
--- OCs inyectadas el 2026-04-20 por la sesión de pruebas del supervisor
+--     sql = open('cleanup_test_tracking.sql', encoding='utf-8').read(); \
+--     [c := eng.connect(), [c.execute(text(s)) for s in sql.split(';') if s.strip() and not s.strip().startswith('--')], c.commit()]"
 -- ============================================================
 
+-- 1) Detalle de recepción (hijos)
+DELETE FROM despachosenviodetalle WHERE NumOc IN (58275, 58501);
+
+-- 2) Cabeceras de envío
+DELETE FROM despachosenvio WHERE NumOc IN (58275, 58501);
+
+-- 3) Tracking simple insertado en sesiones de prueba
 DELETE FROM despachostracking
 WHERE NumOc IN (
-    58275, 58276,                              -- prueba inicial (En Ruta, EN_BODEGA)
+    58275, 58276,                              -- prueba inicial
     58792, 58731, 58729, 58728, 58722,         -- En Ruta
     58704, 58703, 58702, 58614, 58568,         -- EN_BODEGA
     58548, 58520, 58501, 58481,                -- Entregado
