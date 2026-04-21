@@ -13,7 +13,8 @@ marshmallow==4.2.2
 marshmallow-sqlalchemy==1.4.2
 
 # === Base de datos ===
-PyMySQL==1.1.0
+# Bump 1.1.0 → 1.1.1: fija CVE-2024-36039 (SQL injection edge case con caracteres no estándar).
+PyMySQL==1.1.1
 # cryptography: PyMySQL la usa para auth_socket/caching_sha2_password (MySQL 8+/MariaDB 11+).
 # Range conservador para no arrastrar un major nuevo por accidente.
 cryptography>=42.0.0,<46.0.0
@@ -21,8 +22,10 @@ pyodbc==5.3.0
 
 # === API / Docs ===
 flasgger==0.9.7.1
-requests==2.32.0
-Flask-CORS==4.0.0
+# Bump 2.32.0 → 2.32.4: fija CVE-2024-47081 (.netrc credential leak a URL redirect maliciosa).
+requests==2.32.4
+# Bump 4.0.0 → 4.0.1: fija CVE-2024-1681 (bypass de CORS vía backslash en path).
+Flask-CORS==4.0.1
 
 # === Utilidades ===
 python-dotenv==1.2.2

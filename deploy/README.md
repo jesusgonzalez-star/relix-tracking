@@ -119,6 +119,12 @@ ls -la /var/backups/tracking/             # debe haber .sql.gz de hoy
 | Login funciona pero inmediatamente cierra sesión | `SESSION_COOKIE_SECURE=True` sin HTTPS | Finalizar certbot primero, o desactivar temporalmente |
 | Rate limiter cuenta mal | `RATELIMIT_STORAGE_URI=memory://` con >1 worker | Cambiar a `redis://127.0.0.1:6379` |
 | Subir foto falla con 413 | Archivo > `MAX_CONTENT_LENGTH` (16 MB) | Ajustar en env o reducir tamaño |
+| Subir foto falla con "Formato no soportado" | Archivo no es JPEG/PNG/GIF/WebP/HEIC real (ej. .exe renombrado) | Rechazo intencional (magic bytes) |
+
+## Mantenimiento periódico
+
+**Limpieza de fotos huérfanas (recomendado mensual):**  
+Si el proceso de la app muere abruptamente entre `foto.save()` y commit BD (OOM, kill -9, reboot), quedan archivos en `$EVIDENCE_DIR` sin referencia en BD. El código captura excepciones normales y borra, pero no cubre muerte del proceso. Cron sugerido: borrar archivos > 30 días no referenciados en `DespachosEnvio.UrlFotoEvidencia` ni `DespachosTracking.UrlFotoEvidencia`.
 
 ## Referencias
 

@@ -661,9 +661,15 @@ def despacho_bodega(folio):
             transport_display = post_ctx['transport_display']
             obs_text = post_ctx['obs_text']
 
+            from utils.file_validation import validate_image_upload, UnsafeUploadError
             foto_urls = []
             ts_base = datetime.now().strftime('%Y%m%d%H%M%S')
             for i, foto in enumerate(fotos_in):
+                try:
+                    validate_image_upload(foto)
+                except UnsafeUploadError as ue:
+                    flash(f'Foto {i+1} rechazada: {ue}', 'danger')
+                    return redirect(request.url)
                 safe_name = secure_filename(foto.filename or '')
                 ext = os.path.splitext(safe_name)[1].lower() or '.jpg'
                 filename = f"despacho_{folio}_{ts_base}_{i}_{uuid.uuid4().hex[:8]}{ext}"

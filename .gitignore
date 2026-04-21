@@ -5,6 +5,27 @@
 .env.*
 !.env.example
 !.env.production.example
+secrets_prod.txt
+secrets_prod.*
+
+# ============================================
+# Documentación interna (contiene infra/credenciales/PII)
+# ============================================
+CREDENCIALES*.md
+CREDENCIALES*.txt
+CHECKLIST_*.txt
+CHECKLIST_*.md
+COMMANDS_*.sh
+DEPLOYMENT_*.md
+DEPLOYMENT_*.txt
+INFORME_*.md
+INFORME_*.txt
+PLAN_ACCION_*.md
+PLAN_PRUEBAS_*.md
+QUICK_START*.txt
+TROUBLESHOOTING_*.md
+ESCANEO_SEGURIDAD_*.md
+PRE-DEPLOYMENT*.sh
 
 # ============================================
 # Python

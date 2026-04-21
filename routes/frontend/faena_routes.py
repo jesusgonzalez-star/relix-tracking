@@ -657,6 +657,12 @@ def recibir_producto(envio_id):
                         flash('Este envío ya no está en ruta o está siendo procesado por otra sesión.', 'warning')
                         return redirect(receive_form_url)
 
+                    from utils.file_validation import validate_image_upload, UnsafeUploadError
+                    try:
+                        validate_image_upload(foto)
+                    except UnsafeUploadError as ue:
+                        flash(f'Foto rechazada: {ue}', 'danger')
+                        return redirect(receive_form_url)
                     safe_name = secure_filename(foto.filename or '')
                     ext = os.path.splitext(safe_name)[1].lower()
                     if not ext:
