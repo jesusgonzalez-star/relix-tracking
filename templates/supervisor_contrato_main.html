@@ -1251,6 +1251,8 @@
                         fecha: oc.fecha,
                         monto: oc.monto,
                         tracking: oc.tracking,
+                        envio: oc.envio,
+                        lineas_envio: oc.lineas_envio || [],
                         cantidad: cantOc,
                         enBodega: enBod,
                         faltan: faltan
@@ -1260,8 +1262,10 @@
             return map;
         }
 
-        // Vocabulario unificado de estado
-        // RECIBIDO EN FAENA · PARCIAL EN FAENA · ENTREGADO · EN RUTA · EN BODEGA · INGRESADO · PENDIENTE · CANCELADO
+        // Vocabulario unificado de estado.
+        // Prioridad: envío físico (faena) > stock Softland > tracking metadata.
+        // Si tracking dice EN_BODEGA pero Softland no tiene stock, se degrada a
+        // INGRESADO (el sistema registró algo, la mercancía no llegó físicamente).
         function estadoOc(oc) {
             const envio = oc && oc.envio;
             if (envio && envio.fecha_entrega) {
@@ -1273,14 +1277,22 @@
             }
             if (envio && envio.fecha_salida)
                 return {t: 'EN RUTA', c: 'chip-warn'};
+
+            // Stock físico en bodega (fuente de verdad Softland para esta OC-línea)
+            const cant  = Number(oc && oc.cantidad) || 0;
+            const enBod = Number(oc && oc.enBodega) || 0;
+            if (cant > 0 && enBod >= cant) return {t: 'EN BODEGA',       c: 'chip-info'};
+            if (enBod > 0)                 return {t: 'BODEGA PARCIAL',  c: 'chip-info'};
+
             const tracking = oc && oc.tracking;
             if (!tracking || !tracking[0]) return {t: 'SIN REGISTRAR', c: ''};
             const txt = String(tracking[0]).toUpperCase();
-            if (txt.includes('ENTREGADO')) return {t: 'ENTREGADO',  c: 'chip-info'};
-            if (txt.includes('RUTA'))      return {t: 'EN RUTA',    c: 'chip-warn'};
-            if (txt.includes('BODEGA'))    return {t: 'EN BODEGA',  c: 'chip-info'};
+            if (txt.includes('ENTREGADO')) return {t: 'ENTREGADO', c: 'chip-info'};
+            if (txt.includes('RUTA'))      return {t: 'EN RUTA',   c: 'chip-warn'};
+            // Tracking dice EN_BODEGA con enBod=0 → contradicción con Softland.
+            if (txt.includes('BODEGA'))    return {t: 'INGRESADO', c: ''};
             if (txt.includes('CANCEL') || txt.includes('ANULADO')) return {t: 'CANCELADO', c: 'chip-err'};
-            if (txt.includes('INGRESADO')) return {t: 'INGRESADO',  c: ''};
+            if (txt.includes('INGRESADO')) return {t: 'INGRESADO', c: ''};
             return {t: txt.replace(/_/g, ' '), c: ''};
         }
 
@@ -1294,7 +1306,7 @@
             return false;
         }
 
-        // Estado agregado a nivel producto, considera envío + recepción por línea
+        // Estado agregado a nivel producto, considera envío + recepción por línea + stock físico
         function estadoProducto(prod) {
             const total = (prod.ocs || []).length;
             if (total === 0) return {t: 'SIN OC', c: '', icon: 'bi-dash-circle', flagEnviada: 'na'};
@@ -1318,10 +1330,17 @@
                 }
                 if (envio && envio.fecha_salida) { enRuta++; return; }
 
+                // Stock físico Softland de ESTA OC para ESTE producto (fuente de verdad)
+                const cant  = Number(oc.cantidad) || 0;
+                const enBod = Number(oc.enBodega) || 0;
+                if (enBod > 0) { enBodega++; return; }
+
+                // Sin envío y sin stock: caer a tracking como metadata operativa
                 const t = oc.tracking && oc.tracking[0] ? String(oc.tracking[0]).toUpperCase() : '';
                 if (t.includes('ENTREGADO'))      entregadas++;
                 else if (t.includes('RUTA'))      enRuta++;
-                else if (t.includes('BODEGA'))    enBodega++;
+                // tracking dice BODEGA pero enBod=0: degradar a INGRESADO
+                else if (t.includes('BODEGA'))    ingresadas++;
                 else if (t.includes('INGRESADO')) ingresadas++;
             });
 
